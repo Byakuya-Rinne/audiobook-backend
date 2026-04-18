@@ -4,7 +4,6 @@ import cn.hutool.json.JSONObject;
 import com.atguigu.tingshu.album.service.BaseCategoryService;
 import com.atguigu.tingshu.common.result.Result;
 import com.atguigu.tingshu.model.album.BaseAttribute;
-import com.google.gson.JsonObject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -5,5 +5,12 @@
 <mapper namespace="com.atguigu.tingshu.album.mapper.BaseAttributeMapper">
 
 
+    <select id="getAttributesByCategory1Id" resultType="com.atguigu.tingshu.model.album.BaseAttribute">
+
+
+
+
+
+    </select>
 </mapper>
 

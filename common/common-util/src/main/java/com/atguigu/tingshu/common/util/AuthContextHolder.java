@@ -12,7 +12,9 @@ public class AuthContextHolder {
     }
 
     public static Long getUserId() {
-        return userId.get();
+        //Todo 获取用户ID
+        return 114514L;
+//        return userId.get();
     }
 
     public static void removeUserId() {
