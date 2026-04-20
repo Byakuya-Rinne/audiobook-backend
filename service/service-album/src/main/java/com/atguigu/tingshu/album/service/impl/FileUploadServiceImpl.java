@@ -11,12 +11,14 @@ import io.minio.ObjectWriteResponse;
 import io.minio.PutObjectArgs;
 import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 
+@Service
 public class FileUploadServiceImpl implements FileUploadService{
 
     @Autowired
