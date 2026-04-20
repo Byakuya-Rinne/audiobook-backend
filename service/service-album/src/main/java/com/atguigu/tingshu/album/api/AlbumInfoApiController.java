@@ -15,6 +15,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @Tag(name = "专辑管理")
 @RestController
 @RequestMapping("api/album")
@@ -57,6 +59,20 @@ public class AlbumInfoApiController {
 		//4.将分页结果对象响应
 		return Result.ok(pageInfo);
 	}
+
+	/**
+	 * 查询当前用户发布专辑列表
+	 * @return
+	 */
+	@Operation(summary = "查询当前用户发布专辑列表")
+	@GetMapping("/albumInfo/findUserAllAlbumList")
+	public Result<List<AlbumInfo>> findUserAllAlbumList(){
+		Long userId = AuthContextHolder.getUserId();
+		List<AlbumInfo> albumInfoList = albumInfoService.findUserAllAlbumList(userId);
+		return Result.ok(albumInfoList);
+
+	}
+
 
 
 
