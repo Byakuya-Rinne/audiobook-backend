@@ -40,6 +40,21 @@
             <artifactId>java-jwt</artifactId>
             <version>4.3.0</version>
         </dependency>
+        <dependency>
+            <groupId>com.atguigu.tingshu</groupId>
+            <artifactId>rabbit-util</artifactId>
+            <version>1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.tencentcloudapi</groupId>
+            <artifactId>tencentcloud-sdk-java</artifactId>
+            <version>3.1.1014</version>
+        </dependency>
+        <dependency>
+            <groupId>com.tencentcloudapi</groupId>
+            <artifactId>tencentcloud-sdk-java-tms</artifactId>
+            <version>3.1.1010</version>
+        </dependency>
 
         <dependency>
             <groupId>com.atguigu.tingshu</groupId>

@@ -70,9 +70,41 @@ public class AlbumInfoApiController {
 		Long userId = AuthContextHolder.getUserId();
 		List<AlbumInfo> albumInfoList = albumInfoService.findUserAllAlbumList(userId);
 		return Result.ok(albumInfoList);
-
 	}
 
+	@Operation(summary = "删除专辑")
+	@DeleteMapping("/albumInfo/removeAlbumInfo/{id}")
+	public Result removeAlbumInfo(@PathVariable Long id){
+		albumInfoService.removeAlbumInfo(id);
+		return Result.ok();
+	}
+
+	/**
+	 * 根据专辑ID查询专辑信息（包括专辑标签列表）
+	 *
+	 * @param id 专辑ID
+	 * @return 专辑信息
+	 */
+	@Operation(summary = "根据专辑ID查询专辑信息（包括专辑标签列表）")
+	@GetMapping("/albumInfo/getAlbumInfo/{id}")
+	public Result<AlbumInfo> getAlbumInfo(@PathVariable Long id) {
+		AlbumInfo albumInfo = albumInfoService.getAlbumInfo(id);
+		return Result.ok(albumInfo);
+	}
+
+
+	/**
+	 * 修改专辑信息
+	 * @param id 专辑ID
+	 * @param albumInfo 专辑修改后信息
+	 * @return
+	 */
+	@Operation(summary = "更新专辑信息")
+	@PutMapping("/albumInfo/updateAlbumInfo/{id}")
+	public Result updateAlbumInfo(@PathVariable Long id, @Validated @RequestBody AlbumInfoVo albumInfoVo) {
+		albumInfoService.updateAlbumInfo(id, albumInfoVo);
+		return Result.ok();
+	}
 
 
 

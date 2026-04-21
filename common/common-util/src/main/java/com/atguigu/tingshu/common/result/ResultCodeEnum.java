@@ -45,7 +45,7 @@ public enum ResultCodeEnum {
     EXIST_NO_EXPIRE_LIVE(230, "当前存在未过期直播"),
 
     REPEAT_BUY_ERROR(231, "已经购买过该专辑"),
-
+    ALBUM_NODE_ERROR( 218, "该专辑下仍有未删除声音"),
     ;
 
     private Integer code;

@@ -6,6 +6,8 @@ import com.atguigu.tingshu.album.mapper.AlbumInfoMapper;
 import com.atguigu.tingshu.album.mapper.AlbumStatMapper;
 import com.atguigu.tingshu.album.service.AlbumAttributeValueService;
 import com.atguigu.tingshu.album.service.AlbumInfoService;
+import com.atguigu.tingshu.album.service.AuditService;
+import com.atguigu.tingshu.common.execption.GuiguException;
 import com.atguigu.tingshu.model.album.AlbumAttributeValue;
 import com.atguigu.tingshu.model.album.AlbumInfo;
 import com.atguigu.tingshu.model.album.AlbumStat;
@@ -19,11 +21,14 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.atguigu.tingshu.common.constant.SystemConstant.*;
+import static com.atguigu.tingshu.common.result.ResultCodeEnum.ALBUM_NODE_ERROR;
 
 @Slf4j
 @Service
@@ -38,6 +43,9 @@ public class AlbumInfoServiceImpl extends ServiceImpl<AlbumInfoMapper, AlbumInfo
 
 	@Autowired
 	private AlbumAttributeValueService albumAttributeValueService;
+
+	@Autowired
+	private AuditService auditService;
 
 	/**
 	 * TODO 该接口登录才可以访问
@@ -126,5 +134,94 @@ public class AlbumInfoServiceImpl extends ServiceImpl<AlbumInfoMapper, AlbumInfo
 					.orderByDesc(AlbumInfo::getId)
 					.last("limit 50")
 		);
+	}
+
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public void removeAlbumInfo(Long id) {
+		//1.判断该专辑下是否关联有声音，如果存在则不允许删除
+		if (albumInfoMapper.selectCount(new LambdaQueryWrapper<AlbumInfo>().eq(AlbumInfo::getId, id)) > 0) {
+			throw new GuiguException(ALBUM_NODE_ERROR);
+		}
+
+		//2.根据专辑主键ID 删除专辑
+		albumInfoMapper.deleteById(id);
+
+		//3.删除专辑标签关系
+		albumAttributeValueMapper.delete(
+				new LambdaQueryWrapper<>(AlbumAttributeValue.class)
+						.eq(AlbumAttributeValue::getAlbumId, id)
+		);
+
+		//4.删除专辑统计信息
+		albumStatMapper.delete(
+				new LambdaQueryWrapper<AlbumStat>()
+						.eq(AlbumStat::getAlbumId, id)
+		);
+
+		//TODO 同时将存在在ES索引库中专辑一并删除
+
+	}
+
+	@Override
+	public AlbumInfo getAlbumInfo(Long id) {
+		AlbumInfo albumInfo = albumInfoMapper.selectById(id);
+		//还剩 List<AlbumAttributeValue> albumAttributeValueVoList
+
+		if (albumInfo != null){
+			List<AlbumAttributeValue> albumAttributeValueList = albumAttributeValueMapper.selectList(
+					new LambdaQueryWrapper<AlbumAttributeValue>()
+							.eq(AlbumAttributeValue::getAlbumId, id)
+			);
+			albumInfo.setAlbumAttributeValueVoList(albumAttributeValueList);
+		}
+
+
+		return albumInfo;
+	}
+
+
+	/**
+	 * 更新专辑信息
+	 * @param id
+	 * @param albumInfoVo
+	 */
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public void updateAlbumInfo(Long id, AlbumInfoVo albumInfoVo) {
+		//转VO为PO
+		AlbumInfo albumInfo = new AlbumInfo();
+		BeanUtil.copyProperties(albumInfoVo, albumInfo);
+		albumInfo.setId(id);
+		albumInfo.setStatus(ALBUM_STATUS_NO_PASS);
+		albumInfoMapper.updateById(albumInfo);
+
+		//删除原有标签列表
+		albumAttributeValueService.remove(
+				new LambdaQueryWrapper<AlbumAttributeValue>()
+						.eq(AlbumAttributeValue::getAlbumId, id)
+		);
+
+		//保存VO中的AlbumAttributeValueVo
+		List<AlbumAttributeValueVo> voList = albumInfoVo.getAlbumAttributeValueVoList();
+		if (voList != null && voList.size() > 0) {
+			List<AlbumAttributeValue> list = new ArrayList<>();
+			for (AlbumAttributeValueVo albumAttributeValueVo : voList) {
+				AlbumAttributeValue albumAttributeValue = BeanUtil.copyProperties(albumAttributeValueVo, AlbumAttributeValue.class);
+				albumAttributeValue.setAlbumId(id);
+				list.add(albumAttributeValue);
+			}
+			albumAttributeValueService.saveBatch(list);
+		}
+
+		//申鹤妹妹就是萌
+		//把所有文本扔到一起，丢给申鹤
+		String allText = albumInfoVo.getAlbumTitle() + "，" + albumInfoVo.getAlbumIntro();
+		//auditService
+
+
+
+
+
 	}
 }

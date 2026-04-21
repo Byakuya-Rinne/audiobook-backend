@@ -5,6 +5,36 @@
 <mapper namespace="com.atguigu.tingshu.album.mapper.AlbumInfoMapper">
 
 
-
+    <select id="findUserAlbumPageByUserId" resultType="com.atguigu.tingshu.vo.album.AlbumListVo">
+        SELECT
+            ai.id album_id,
+            ai.cover_url cover_url,
+            ai.album_title album_title,
+            ai.include_track_count include_track_count,
+            -- 播放量，购买量，订阅量，评论数
+            max(if(stat.stat_type = '0401', stat_num, -1)) as play_statNum,
+            max(if(stat.stat_type = '0402', stat_num, -1)) as subscribe_statNum,
+            max(if(stat.stat_type = '0403', stat_num, -1)) as buy_statNum,
+            max(if(stat.stat_type = '0404', stat_num, -1)) as comment_statNum
+        FROM album_info ai
+                 INNER JOIN
+             album_stat stat
+             ON
+                 ai.id = stat.album_id
+        <where>
+            <if test="albumInfoQuery.userId != null and albumInfoQuery.userId != ''">
+                ai.user_id = #{albumInfoQuery.userId}
+            </if>
+            <if test="albumInfoQuery.status != null and albumInfoQuery.status != ''">
+                and ai.status = #{albumInfoQuery.status}
+            </if>
+            <if test="albumInfoQuery.albumTitle != null and albumInfoQuery.albumTitle != ''">
+                and ai.album_title like concat('%' , #{albumInfoQuery.albumTitle}, '%' )
+            </if>
+        and ai.is_deleted = 0
+    </where>
+        group by ai.id
+        ORDER BY ai.id
+    </select>
 </mapper>
 
