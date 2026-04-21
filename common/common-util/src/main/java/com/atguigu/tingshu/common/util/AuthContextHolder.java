@@ -13,7 +13,7 @@ public class AuthContextHolder {
 
     public static Long getUserId() {
         //Todo 获取用户ID
-        return 114514L;
+        return 1L;
 //        return userId.get();
     }
 

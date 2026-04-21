@@ -1,5 +1,8 @@
 package com.atguigu.tingshu.common.constant;
 
+import java.util.Arrays;
+import java.util.List;
+
 public class SystemConstant {
 
     //专辑付费类型  0101-免费、0102-vip免费、0103-付费
@@ -71,4 +74,6 @@ public class SystemConstant {
     //订单减免类型 1405-专辑折扣 1406-VIP服务折
     public static final String  ORDER_DERATE_ALBUM_DISCOUNT="1405";  // 专辑折扣
     public static final String  ORDER_DERATE_VIP_SERVICE_DISCOUNT="1406";  // VIP服务折扣
+
+    public static final List<String> AUDIO_TYPES = Arrays.asList("mp3", "wav", "m4a", "flac");
 }

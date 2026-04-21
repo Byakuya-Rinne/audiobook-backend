@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
+
 @Slf4j
 @Service
 @SuppressWarnings({"all"})
@@ -16,4 +18,18 @@ public class UserInfoServiceImpl extends ServiceImpl<UserInfoMapper, UserInfo> i
 	@Autowired
 	private UserInfoMapper userInfoMapper;
 
+	/**
+	 * 微信一键登录
+	 *
+	 * @param code 小程序端根据当前微信，生成访问微信服务端的临时凭据
+	 * @return
+	 */
+	@Override
+	public Map<String, String> wxLogin(String code) {
+
+
+
+
+		return ;
+	}
 }
