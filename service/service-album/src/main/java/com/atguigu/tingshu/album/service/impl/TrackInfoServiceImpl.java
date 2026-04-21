@@ -146,10 +146,60 @@ public class TrackInfoServiceImpl extends ServiceImpl<TrackInfoMapper, TrackInfo
 	 */
 	@Override
 	public void updateTrackInfo(Long id, TrackInfoVo trackInfoVo) {
+		Boolean isNeedReview = false;
+		//1.判断音频文件是否更新，如果更新，再次获取新音频文件详情，TODO 对新音频再次进行审核
+		//1.1 根据声音ID查询声音信息，获取原来的音频ID
+		TrackInfo trackInfo = this.getById(id);
+		String oldMediaFileId = trackInfo.getMediaFileId();
+
+		//1.2 封装更新后：标题、简介、封面图片、音频URL、唯一标识
+		BeanUtil.copyProperties(trackInfoVo, trackInfo);
+
+		//1.3 对比声音vo中音频ID判断是否变更
+		if (!oldMediaFileId.equals(trackInfoVo.getMediaFileId())) {
+			//1.4 如果变更，再次调用平台接口获取音频详情，更新音频相关信息：时长、大小、类型、播放地址、
+			TrackMediaInfoVo oldMediaInfo = vodService.getMediaInfo(trackInfoVo.getMediaFileId());
+			trackInfo.setMediaDuration(BigDecimal.valueOf(oldMediaInfo.getDuration()));
+			trackInfo.setMediaType(oldMediaInfo.getType());
+			trackInfo.setMediaSize(oldMediaInfo.getSize());
+			//1.5 将旧音频文件从点播平台删除
+			vodService.deleteMedia(oldMediaFileId);
+			isNeedReview = true;
+		}
 
 
 
+		//2.更新声音信息，修改后文本同样需要进行内容审核
+		trackInfo.setStatus(SystemConstant.TRACK_STATUS_NO_PASS);
 
+		//3.对声音中文本进行内容审核
+		String suggest = auditService.auditText(trackInfo.getTrackTitle()
+				+ ", "
+				+ trackInfo.getTrackIntro());
+		switch (suggest){
+			case "block": trackInfo.setStatus(TRACK_STATUS_NO_PASS);break;
+			case "review": trackInfo.setStatus(TRACK_STATUS_ARTIFICIAL);break;
+			case "pass":{
+				if (isNeedReview == true){
+//					图片
+//					String coverImageSuggest = auditService.auditImage(trackInfo.getCoverUrl());
+//					if ( "pass".equals(coverImageSuggest)){
+//						trackInfo.setStatus(TRACK_STATUS_PASS);break;
+//					}else if ("review".equals(coverImageSuggest)){
+//						trackInfo.setStatus(TRACK_STATUS_REVIEWING);break;
+//					}else if ("block".equals(coverImageSuggest)){
+//						trackInfo.setStatus(TRACK_STATUS_NO_PASS);break;
+//					}
+					//文字通过，审核音频
+					String taskId = auditService.startReviewTask(trackInfo.getMediaFileId());
+					trackInfo.setReviewTaskId(taskId);
+					trackInfo.setStatus(TRACK_STATUS_REVIEWING);
+				}else {
+					trackInfo.setStatus(SystemConstant.TRACK_STATUS_PASS);break;
+				}
+			}
+		}
+		trackInfoMapper.updateById(trackInfo);
 	}
 
 

@@ -21,12 +21,12 @@ public class UserInfoServiceImpl extends ServiceImpl<UserInfoMapper, UserInfo> i
 	/**
 	 * 微信一键登录
 	 *
-	 * @param code 小程序端根据当前微信，生成访问微信服务端的临时凭据
+	 * @param code 小程序端根据当前微信，生成访问为微信服务端临时凭据
 	 * @return
 	 */
+
 	@Override
 	public Map<String, String> wxLogin(String code) {
-
 
 
 
