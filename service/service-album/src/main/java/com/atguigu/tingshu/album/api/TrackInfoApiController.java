@@ -4,9 +4,12 @@ import cn.hutool.core.io.FileTypeUtil;
 import com.atguigu.tingshu.album.service.TrackInfoService;
 import com.atguigu.tingshu.common.execption.GuiguException;
 import com.atguigu.tingshu.common.result.Result;
+import com.atguigu.tingshu.common.result.ResultCodeEnum;
+import com.atguigu.tingshu.common.util.AuthContextHolder;
 import com.atguigu.tingshu.vo.album.TrackInfoVo;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.BindingResult;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import com.atguigu.tingshu.album.service.VodService;
@@ -65,7 +68,20 @@ public class TrackInfoApiController {
 	 */
 	@Operation(summary = "保存声音")
 	@PostMapping("/trackInfo/saveTrackInfo")
-	public Result saveTrackInfo(@Validated @RequestBody TrackInfoVo trackInfoVo) {
+	public Result saveTrackInfo(@Validated @RequestBody TrackInfoVo trackInfoVo, BindingResult bindingResult) {
+
+		// 手动判断是否有校验错误
+		if (bindingResult.hasErrors()) {
+			String errorMsg = bindingResult.getFieldError().getDefaultMessage();
+			// 2. 抛出自定义异常
+			throw new GuiguException(ResultCodeEnum.ARGUMENT_VALID_ERROR.getCode(), errorMsg);
+		}
+		Long userId = AuthContextHolder.getUserId();
+
+		trackInfoService.saveTrackInfo(trackInfoVo, userId);
+		return Result.ok();
+
+	}
 
 
 
