@@ -27,6 +27,8 @@ public class SystemConstant {
     //声音状态 0501-审核通过 0502"-审核不通过
     public static final String  TRACK_STATUS_PASS="0501";  // 审核通过
     public static final String  TRACK_STATUS_NO_PASS="0502";  // 审核不通过
+    public static final String  TRACK_STATUS_ARTIFICIAL="0503";  // 人工复审
+    public static final String  TRACK_STATUS_REVIEWING="0504";  // 机审中
 
     //声音来源 0601-用户原创 0602-上传
     public static final String  TRACK_SOURCE_USER="0601";  // 用户原创

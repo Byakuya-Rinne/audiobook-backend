@@ -3,18 +3,23 @@ package com.atguigu.tingshu.album.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import com.atguigu.tingshu.album.mapper.AlbumInfoMapper;
 import com.atguigu.tingshu.album.mapper.TrackInfoMapper;
+import com.atguigu.tingshu.album.mapper.TrackStatMapper;
+import com.atguigu.tingshu.album.service.AuditService;
 import com.atguigu.tingshu.album.service.TrackInfoService;
 import com.atguigu.tingshu.album.service.VodService;
+import com.atguigu.tingshu.common.constant.SystemConstant;
 import com.atguigu.tingshu.common.execption.GuiguException;
 import com.atguigu.tingshu.common.result.ResultCodeEnum;
 import com.atguigu.tingshu.model.album.AlbumInfo;
 import com.atguigu.tingshu.model.album.TrackInfo;
+import com.atguigu.tingshu.model.album.TrackStat;
 import com.atguigu.tingshu.vo.album.TrackInfoVo;
 import com.atguigu.tingshu.vo.album.TrackMediaInfoVo;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
@@ -34,6 +39,13 @@ public class TrackInfoServiceImpl extends ServiceImpl<TrackInfoMapper, TrackInfo
 	@Autowired
 	private VodService vodService;
 
+	@Autowired
+	private AuditService auditService;
+
+	@Autowired
+	private TrackStatMapper trackStatMapper;
+
+
 	/**
 	 * 保存声音
 	 *
@@ -41,23 +53,25 @@ public class TrackInfoServiceImpl extends ServiceImpl<TrackInfoMapper, TrackInfo
 	 * @param userId
 	 */
 	@Override
+	@Transactional(rollbackFor = Exception.class)
 	public void saveTrackInfo(TrackInfoVo trackInfoVo, Long userId) {
-
 		//1.根据专辑ID查询专辑信息 用于更新声音数量
 		AlbumInfo oldAlbumInfo = albumInfoMapper.selectById(trackInfoVo.getAlbumId());
-
-		//2.新增声音记录
-		//2.1 将声音VO转为PO
+		//2.保存声音记录、更新专辑内包含声音数量
+		//2.1 将声音VO转为PO对象
 		TrackInfo trackInfo = BeanUtil.copyProperties(trackInfoVo, TrackInfo.class);
+		if (trackInfo == null){
+			throw new GuiguException(ResultCodeEnum.SERVICE_ERROR);
+		}
 
-		//2.2 给属性赋值
-		//2.2.1 设置用户ID
+		//2.2 封装声音属性信息
+		//2.2.1 基础：用户ID、状态、来源、封面图片
 		trackInfo.setUserId(userId);
 
-		//2.2.2 设置声音序号 要求从1开始递增
-		trackInfo.setAlbumId(oldAlbumInfo.getId() + 1);
+		//2.2.2 设置序号=专辑包含声音数量+1
+		trackInfo.setOrderNum(oldAlbumInfo.getIncludeTrackCount() + 1);
 
-		//2.2.3 调用腾讯点播平台获取音频详情信息：时长、大小、类型
+		//2.2.3 从腾讯点播平台获取，声音时长、大小、类型
 		TrackMediaInfoVo mediaInfoVo = vodService.getMediaInfo(trackInfo.getMediaFileId());
 		if (mediaInfoVo != null) {
 			trackInfo.setMediaDuration(BigDecimal.valueOf(mediaInfoVo.getDuration()));
@@ -69,22 +83,81 @@ public class TrackInfoServiceImpl extends ServiceImpl<TrackInfoMapper, TrackInfo
 		trackInfo.setSource(TRACK_SOURCE_USER);
 
 		//2.2.5 状态：待审核
-
+		trackInfo.setStatus(SystemConstant.TRACK_STATUS_NO_PASS);
 
 		//2.2.6 封面图片 如果未提交使用所属专辑封面
-		if(trackInfoVo.getCoverUrl() == null || "".equals(trackInfoVo.getCoverUrl())){
+		if(trackInfoVo.getCoverUrl() == null || "".equals(trackInfoVo.getCoverUrl().trim())){
 			trackInfo.setCoverUrl(oldAlbumInfo.getCoverUrl());
 		}
 
-		//2.3 新增声音记录
 
-		//3. 更新专辑信息：包含声音数量
 
-		//4.新增声音统计记录
+		//2.4 更新专辑包含声音数量
+		oldAlbumInfo.setIncludeTrackCount(oldAlbumInfo.getIncludeTrackCount() + 1);
 
-		//5.TODO 对点播平台音频文件进行审核（异步审核）
+
+		//4.对声音中文本进行内容审核 TODO: 审核声音、新更改的图片等
+		String text = trackInfo.getTrackTitle() + trackInfo.getTrackIntro();
+		String suggest = auditService.auditText(text);
+		if("block".equals(suggest)){
+			trackInfo.setStatus(TRACK_STATUS_NO_PASS);
+		}else if("review".equals(suggest)){
+			trackInfo.setStatus(TRACK_STATUS_ARTIFICIAL);
+		}else if("pass".equals(suggest)){
+			trackInfo.setStatus(TRACK_STATUS_PASS);
+			//5.对上传的声音文件发起审核任务ID，关联审核任务ID
+			String taskId = auditService.startReviewTask(trackInfo.getMediaFileId());
+			trackInfo.setReviewTaskId(taskId);
+			trackInfo.setStatus(TRACK_STATUS_REVIEWING);
+		}
+		//2.3 保存声音得到声音ID
+		trackInfoMapper.insert(trackInfo);
+		Long trackInfoId = trackInfo.getId();
+
+		//3.新增统计信息
+		this.saveTrackStat(trackInfoId, SystemConstant.TRACK_STAT_PLAY, 0);
+		this.saveTrackStat(trackInfoId, SystemConstant.TRACK_STAT_COLLECT, 0);
+		this.saveTrackStat(trackInfoId, SystemConstant.TRACK_STAT_PRAISE, 0);
+		this.saveTrackStat(trackInfoId, SystemConstant.TRACK_STAT_COMMENT, 0);
+		trackInfoMapper.updateById(trackInfo);
+	}
+
+
+
+
+
+	@Override
+	public void saveTrackStat(Long trackId, String statType, int statNum) {
+		TrackStat trackStat = new TrackStat();
+		trackStat.setTrackId(trackId);
+		trackStat.setStatType(statType);
+		trackStat.setStatNum(statNum);
+		trackStatMapper.insert(trackStat);
+	}
+
+
+
+	/**
+	 * 修改声音信息
+	 *
+	 * @param id          声音Id
+	 * @param trackInfoVo 声音信息VO
+	 * @return
+	 */
+	@Override
+	public void updateTrackInfo(Long id, TrackInfoVo trackInfoVo) {
+
 
 
 
 	}
-}
+
+
+
+
+
+
+
+
+
+	}
