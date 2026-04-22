@@ -3,13 +3,33 @@
 
 
 <mapper namespace="com.atguigu.tingshu.album.mapper.BaseAttributeMapper">
+    
+    <resultMap id="BaseAttributeResultMap" type="com.atguigu.tingshu.model.album.BaseAttribute">
+        <id property="id" column="id"/>
+<!--        <result property="category1Id" column="category1_id"/>-->
+<!--        <result property="attributeName" column="attribute_name"/>-->
+        <collection property="attributeValueList"
+                    ofType="com.atguigu.tingshu.model.album.BaseAttributeValue"
+                    autoMapping="true">
+            <id property="id" column="value_id"/>
+        </collection>
 
+    </resultMap>
 
-    <select id="getAttributesByCategory1Id" resultType="com.atguigu.tingshu.model.album.BaseAttribute">
-
-
-
-
+    <select id="getAttributesByCategory1Id" resultMap="BaseAttributeResultMap">
+        select
+            ba.id,
+            ba.attribute_name,
+            bav.id base_attribute_value_id,
+            bav.value_name value_name
+        from base_attribute ba
+        inner join
+             base_attribute_value bav
+        on
+            ba.id = bav.attribute_id
+        where
+            ba.category1_id = #{category1Id}
+          and ba.is_deleted = 0
 
     </select>
 </mapper>
