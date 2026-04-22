@@ -33,5 +33,5 @@ public interface AuditService {
      * review：建议复审；
      * block：建议封禁。
      */
-    public String getRevivewTaskResult(String taskId);
+    public String getReviewTaskResult(String taskId);
 }

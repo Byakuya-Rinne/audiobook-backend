@@ -2,6 +2,7 @@ package com.atguigu.tingshu.album.service.impl;
 
 import cn.hutool.core.codec.Base64;
 import com.atguigu.tingshu.album.service.AuditService;
+import com.atguigu.tingshu.common.execption.GuiguException;
 import com.tencentcloudapi.common.exception.TencentCloudSDKException;
 import com.tencentcloudapi.ims.v20201229.ImsClient;
 import com.tencentcloudapi.ims.v20201229.models.ImageModerationRequest;
@@ -86,7 +87,33 @@ public class AuditServiceImpl implements AuditService {
     }
 
     @Override
-    public String getRevivewTaskResult(String taskId) {
-        return "";
+    public String getReviewTaskResult(String taskId) {
+
+        try {
+            // 实例化一个请求对象,每个接口都会对应一个request对象
+            DescribeTaskDetailRequest req = new DescribeTaskDetailRequest();
+            req.setTaskId(taskId);
+            // 返回的resp是一个DescribeTaskDetailResponse的实例，与请求对象对应
+            DescribeTaskDetailResponse resp = vodClient.DescribeTaskDetail(req);
+
+            if (resp != null) {
+                //3.1 确保任务类型是：音视频审核任务
+                if ("ReviewAudioVideo".equals(resp.getTaskType())) {
+                    //3.2 任务完成情况下 ，获取音视频审核任务信息
+                    if("FINISH".equals(resp.getStatus())){
+                        ReviewAudioVideoTask reviewAudioVideoTask = resp.getReviewAudioVideoTask();
+                        if("FINISH".equals(reviewAudioVideoTask.getStatus())){
+                            //音视频审核任务的输出。
+                            ReviewAudioVideoTaskOutput output = reviewAudioVideoTask.getOutput();
+                            String suggestion = output.getSuggestion();
+                            return suggestion.toLowerCase();
+                        }
+                    }
+                }
+            }
+        } catch (TencentCloudSDKException e) {
+            throw new RuntimeException(e);
+        }
+        return null;
     }
 }
