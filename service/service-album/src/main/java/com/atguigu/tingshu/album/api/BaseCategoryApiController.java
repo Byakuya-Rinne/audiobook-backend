@@ -24,9 +24,7 @@ public class BaseCategoryApiController {
 	@Autowired
 	private BaseCategoryService baseCategoryService;
 
-	//  /api/album/category/getBaseCategoryList
 	// 获取专辑列表，直接返回三级列表的id、标题
-
 	@GetMapping("/category/getBaseCategoryList")
 	public Result<List<JSONObject>> getBaseCategoryList() {
 		List<JSONObject> baseCategoryList = baseCategoryService.getBaseCategoryList();

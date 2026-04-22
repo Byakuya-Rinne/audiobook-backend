@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -42,10 +43,10 @@ public class VodServiceImpl implements VodService {
     @Override
     public Map<String, String> uploadTrack(MultipartFile file) {
         Map<String, String> map = new HashMap<String, String>();
-
+        String localFilePath = null;
         try {
             //1.将上传文件保存到本地得到文件路径 TODO:后续采用定时任务清理临时目录下使用完毕文件
-            String localFilePath = UploadFileUtil.uploadTempPath(vodConstantProperties.getTempPath(), file);
+            localFilePath = UploadFileUtil.uploadTempPath(vodConstantProperties.getTempPath(), file);
 
             //2.构造上传请求对象:设置媒体本地上传路径
             VodUploadRequest request = new VodUploadRequest();
@@ -65,6 +66,10 @@ public class VodServiceImpl implements VodService {
         } catch (Exception e) {
             log.error("文件上传点播平台异常", e);
             throw new GuiguException(500, "文件上传点播平台异常：" + e.getMessage());
+        } finally {
+            if (localFilePath != null){
+                new File(localFilePath).delete();
+            }
         }
         return null;
     }
