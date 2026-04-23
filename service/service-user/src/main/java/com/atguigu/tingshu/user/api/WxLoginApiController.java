@@ -1,8 +1,11 @@
 package com.atguigu.tingshu.user.api;
 
 
+import com.atguigu.tingshu.common.login.GuiGuLogin;
 import com.atguigu.tingshu.common.result.Result;
+import com.atguigu.tingshu.common.util.AuthContextHolder;
 import com.atguigu.tingshu.user.service.UserInfoService;
+import com.atguigu.tingshu.vo.user.UserInfoVo;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +38,22 @@ public class WxLoginApiController {
         Map<String, String> map = userInfoService.wxLogin(code);
         return Result.ok(map);
     }
+
+
+    /**
+     * 获取当前登录用户基本信息
+     *
+     * @return
+     */
+    @GuiGuLogin
+    @Operation(summary = "获取当前登录用户基本信息")
+    @GetMapping("/getUserInfo")
+    public Result<UserInfoVo> getUserInfo() {
+        Long userId = AuthContextHolder.getUserId();
+        UserInfoVo userInfoVo = userInfoService.getUserInfo(userId);
+        return Result.ok(userInfoVo);
+    }
+
 
 
 }

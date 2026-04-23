@@ -113,4 +113,14 @@ public class UserInfoServiceImpl extends ServiceImpl<UserInfoMapper, UserInfo> i
 			throw new GuiguException(500, "微信登录失败");
 		}
 	}
+
+
+	@Override
+	public UserInfoVo getUserInfo(Long userId) {
+		UserInfo userInfo = userInfoMapper.selectById(userId);
+		if (userInfo != null) {
+			return BeanUtil.copyProperties(userInfo, UserInfoVo.class);
+		}
+		return null;
+	}
 }
