@@ -14,6 +14,7 @@ import java.util.List;
 
 @Data
 @Document(indexName = "albuminfo")
+
 @JsonIgnoreProperties(ignoreUnknown = true)//目的：防止json字符串转成实体对象时因未识别字段报错
 public class AlbumInfoIndex implements Serializable {
 
