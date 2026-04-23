@@ -7,24 +7,31 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.IdUtil;
 import com.atguigu.tingshu.common.constant.RedisConstant;
 import com.atguigu.tingshu.common.execption.GuiguException;
+import com.atguigu.tingshu.common.login.GuiGuLogin;
 import com.atguigu.tingshu.common.rabbit.constant.MqConst;
 import com.atguigu.tingshu.common.rabbit.service.RabbitService;
+import com.atguigu.tingshu.common.result.ResultCodeEnum;
 import com.atguigu.tingshu.model.user.UserInfo;
 import com.atguigu.tingshu.user.mapper.UserInfoMapper;
 import com.atguigu.tingshu.user.service.UserInfoService;
 import com.atguigu.tingshu.vo.user.UserInfoVo;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.PostMapping;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+
+import static com.atguigu.tingshu.common.result.ResultCodeEnum.FAIL;
 
 @Slf4j
 @Service
@@ -123,4 +130,25 @@ public class UserInfoServiceImpl extends ServiceImpl<UserInfoMapper, UserInfo> i
 		}
 		return null;
 	}
+
+	/**
+	 * 修改当前用户基本信息
+	 * @param userInfoVo
+	 * @return
+	 */
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public void updateUser(Long userId, UserInfoVo userInfoVo) {
+		//只允许修改昵称、头像!!!
+		UserInfo userInfo = userInfoMapper.selectById(userId);
+		userInfo.setNickname(userInfoVo.getNickname());
+		userInfo.setAvatarUrl(userInfoVo.getAvatarUrl());
+		int i = userInfoMapper.updateById(userInfo);
+		if (i != 1){
+			throw new GuiguException(FAIL);
+		}
+	}
+
+
+
 }

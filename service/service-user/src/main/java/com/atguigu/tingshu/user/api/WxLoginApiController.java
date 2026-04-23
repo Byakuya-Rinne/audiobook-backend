@@ -10,10 +10,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
@@ -53,6 +50,23 @@ public class WxLoginApiController {
         UserInfoVo userInfoVo = userInfoService.getUserInfo(userId);
         return Result.ok(userInfoVo);
     }
+
+    /**
+     * 更新当前用户信息
+     * @param userInfoVo
+     * @return
+     */
+    @GuiGuLogin
+    @Operation(summary = "更新当前用户信息")
+    @PostMapping("/updateUser")
+    public Result updateUser(@RequestBody UserInfoVo userInfoVo) {
+        //1.获取当前用户ID
+        Long userId = AuthContextHolder.getUserId();
+        //2.调用业务逻辑层修改
+        userInfoService.updateUser(userId, userInfoVo);
+        return Result.ok();
+    }
+
 
 
 
