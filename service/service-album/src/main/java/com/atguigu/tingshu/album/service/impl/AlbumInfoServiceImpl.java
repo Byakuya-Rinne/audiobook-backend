@@ -8,6 +8,8 @@ import com.atguigu.tingshu.album.service.AlbumAttributeValueService;
 import com.atguigu.tingshu.album.service.AlbumInfoService;
 import com.atguigu.tingshu.album.service.AuditService;
 import com.atguigu.tingshu.common.execption.GuiguException;
+import com.atguigu.tingshu.common.rabbit.constant.MqConst;
+import com.atguigu.tingshu.common.rabbit.service.RabbitService;
 import com.atguigu.tingshu.model.album.AlbumAttributeValue;
 import com.atguigu.tingshu.model.album.AlbumInfo;
 import com.atguigu.tingshu.model.album.AlbumStat;
@@ -28,6 +30,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.atguigu.tingshu.common.constant.SystemConstant.*;
+import static com.atguigu.tingshu.common.constant.SystemConstant.*;
 import static com.atguigu.tingshu.common.result.ResultCodeEnum.ALBUM_NODE_ERROR;
 
 @Slf4j
@@ -46,6 +49,9 @@ public class AlbumInfoServiceImpl extends ServiceImpl<AlbumInfoMapper, AlbumInfo
 
 	@Autowired
 	private AuditService auditService;
+
+	@Autowired
+	private RabbitService rabbitService;
 
 	/**
 	 * TODO 该接口登录才可以访问
@@ -163,6 +169,11 @@ public class AlbumInfoServiceImpl extends ServiceImpl<AlbumInfoMapper, AlbumInfo
 
 	}
 
+	/**
+	 * 查询专辑信息（包含标签列表）
+	 * @param id
+	 * @return
+	 */
 	@Override
 	public AlbumInfo getAlbumInfo(Long id) {
 		AlbumInfo albumInfo = albumInfoMapper.selectById(id);
@@ -218,7 +229,17 @@ public class AlbumInfoServiceImpl extends ServiceImpl<AlbumInfoMapper, AlbumInfo
 		//把所有文本扔到一起，丢给申鹤
 		String allText = albumInfoVo.getAlbumTitle() + "，" + albumInfoVo.getAlbumIntro();
 		//auditService
-
+//		String suggest = auditService.auditText(allText);
+//		if("block".equals(suggest)){
+//			albumInfo.setStatus(ALBUM_STATUS_NO_PASS);
+//			rabbitService.sendMessage(MqConst.EXCHANGE_ALBUM, MqConst.ROUTING_ALBUM_LOWER, id);
+//		}else if("review".equals(suggest)){
+//			albumInfo.setStatus(ALBUM_STATUS_ARTIFICIAL);
+//		}else if("pass".equals(suggest)){
+//			albumInfo.setStatus(ALBUM_STATUS_PASS);
+//			rabbitService.sendMessage(MqConst.EXCHANGE_ALBUM, MqConst.ROUTING_ALBUM_UPPER, id);
+//		}
+		albumInfoMapper.updateById(albumInfo);
 
 
 

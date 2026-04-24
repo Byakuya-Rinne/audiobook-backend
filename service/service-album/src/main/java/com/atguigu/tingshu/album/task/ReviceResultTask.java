@@ -30,7 +30,7 @@ public class ReviceResultTask {
     @Autowired
     AuditService auditService;
 
-    @Scheduled(cron = "0 5 * * * * *")//秒 分 时 日 月 周 年
+    @Scheduled(cron = "0 5 * * * *")//秒 分 时 日 月 周 年
     public void reviceResultJob(){
         log.info("定时任务获取声音审核结果");
         //1.根据条件：1.审核中 TRACK_STATUS_REVIEWING 状态  2.限制数量 3.查询声音ID跟审核任务ID
