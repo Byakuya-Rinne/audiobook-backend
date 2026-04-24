@@ -17,6 +17,8 @@ import com.atguigu.tingshu.query.album.TrackInfoQuery;
 import com.atguigu.tingshu.vo.album.TrackInfoVo;
 import com.atguigu.tingshu.vo.album.TrackListVo;
 import com.atguigu.tingshu.vo.album.TrackMediaInfoVo;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
@@ -220,8 +222,57 @@ public class TrackInfoServiceImpl extends ServiceImpl<TrackInfoMapper, TrackInfo
 	}
 
 
+	/**
+	 * 删除声音
+	 *
+	 * @param id 声音ID
+	 */
+	@Transactional(rollbackFor = Exception.class)
+	@Override
+	public void removeTrackInfo(Long id) {
+		//1.根据声音ID查询声音信息，得到专辑ID、声音序号
+		TrackInfo trackInfo = this.getById(id);
+		Long albumId = trackInfo.getAlbumId();
+		Integer orderNum = trackInfo.getOrderNum();
 
+		//2.根据专辑ID查询专辑信息，用于 更新专辑声音数量
+		AlbumInfo albumInfo = albumInfoMapper.selectById(albumId);
+		Integer trackCount = albumInfo.getIncludeTrackCount();
 
+		//3.先更新专辑下大于被删声音序号 确保声音需要连续
+//		if (trackCount > orderNum){
+//			for (int i = 0; i < orderNum - trackCount; i++){
+//			}
+//		}
+//		albumInfo.
+		trackInfoMapper.update(
+				null,
+				new LambdaUpdateWrapper<TrackInfo>()
+						.eq(TrackInfo::getAlbumId, albumId)
+						.ge(TrackInfo::getOrderNum, orderNum)
+						.setSql("order_num = order_num - 1")
+		);
 
+		//4.删除声音记录
+		trackInfoMapper.deleteById(id);
+
+		// 5.删除统计信息
+		trackStatMapper.delete(
+				new LambdaQueryWrapper<TrackStat>().eq(TrackStat::getTrackId, id)
+		);
+
+		//6.从点播平台删除音频文件
+//		vodService.deleteMedia(trackInfo.getMediaFileId());
 
 	}
+
+
+
+
+
+
+
+
+
+
+}

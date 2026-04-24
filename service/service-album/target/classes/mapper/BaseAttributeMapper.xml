@@ -11,7 +11,7 @@
         <collection property="attributeValueList"
                     ofType="com.atguigu.tingshu.model.album.BaseAttributeValue"
                     autoMapping="true">
-            <id property="id" column="value_id"/>
+            <id property="id" column="base_attribute_value_id"/>
         </collection>
 
     </resultMap>
