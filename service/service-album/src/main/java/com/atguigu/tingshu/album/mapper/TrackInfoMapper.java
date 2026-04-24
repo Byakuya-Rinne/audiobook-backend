@@ -6,10 +6,11 @@ import com.atguigu.tingshu.vo.album.TrackListVo;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface TrackInfoMapper extends BaseMapper<TrackInfo> {
 
 
-    Page<TrackListVo> findUserTrackPage(Page<TrackListVo> pageInfo, TrackInfoQuery trackInfoQuery);
+    Page<TrackListVo> findUserTrackPage(Page<TrackListVo> pageInfo, @Param("trackInfoQuery") TrackInfoQuery trackInfoQuery);
 }

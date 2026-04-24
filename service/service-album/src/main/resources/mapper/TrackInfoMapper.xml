@@ -21,17 +21,18 @@ from
     track_info ti
     inner join
         track_stat ts
-        on ti.id = ts.track_id
+        on ti.id = ts.track_id  and ts.is_deleted = 0
 <where>
-    <if test="trackInfoQuery.getUserId != null">
-        ti.user_id = #{trackInfoQuery.getUserId}
+    <if test="trackInfoQuery.userId != null">
+        ti.user_id = #{userId}
     </if>
-    <if test="trackInfoQuery.getStatus != null">
-        and ts.stat_type = #{trackInfoQuery.getStatus}
+    <if test="trackInfoQuery.status != null and trackInfoQuery.status != ''">
+        and ts.stat_type = #{status}
     </if>
-    <if test="trackInfoQuery.getTrackTitle != null">
-        and ti.track_title like concat('%', #{trackInfoQuery.getTrackTitle}, '%')
+    <if test="trackInfoQuery.trackTitle != null and trackInfoQuery.trackTitle != ''">
+        and ti.track_title like concat('%', #{trackTitle}, '%')
     </if>
+    and ti.is_deleted = 0
 </where>
         group by ti.id
         order by ti.id desc
