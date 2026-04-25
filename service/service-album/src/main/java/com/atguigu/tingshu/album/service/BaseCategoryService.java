@@ -16,4 +16,6 @@ public interface BaseCategoryService extends IService<BaseCategory1> {
     List<BaseAttribute> getAttributesByCategory1Id(Long category1Id);
 
     BaseCategoryView getCategoryView(Long category3Id);
+
+    JSONObject getBaseCategoryListByCategory1Id(Long category1Id);
 }

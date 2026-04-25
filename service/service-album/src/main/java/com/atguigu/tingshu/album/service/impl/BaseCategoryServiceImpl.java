@@ -125,7 +125,25 @@ public class BaseCategoryServiceImpl extends ServiceImpl<BaseCategory1Mapper, Ba
 		return baseCategoryViewMapper.selectById(category3Id);
 	}
 
+	/**
+	 * 查询1级分类下包含所有二级以及三级分类
+	 *
+	 * @param category1Id
+	 * @return
+	 */
+	@Override
+	public JSONObject getBaseCategoryListByCategory1Id(Long category1Id) {
+		//1.处理1级分类
+		//1.1 根据1级分类ID查询分类视图得到所有"1级分类"列表
 
+
+
+
+
+
+
+		return null;
+	}
 }
 
 
