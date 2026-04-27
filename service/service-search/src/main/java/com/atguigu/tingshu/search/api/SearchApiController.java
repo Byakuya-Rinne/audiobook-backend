@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @Tag(name = "搜索专辑管理")
 @RestController
 @RequestMapping("api/search")
@@ -31,8 +33,28 @@ public class SearchApiController {
         return Result.ok();
     }
 
+    /**
+     * 搜索自动补全
+     *
+     * @param keyword 用户已录入内容：汉字、拼音、拼音首字母
+     * @return 自动补全待选文本列表
+     */
+    @Operation(summary = "搜索自动补全")
+    @GetMapping("/albumInfo/completeSuggest/{keyword}")
+    public Result<List<String>> completeSuggest(@PathVariable String keyword) {
+        List<String> list = searchService.completeSuggest(keyword);
+        return Result.ok(list);
+    }
 
 
 
-}
+
+
+
+
+
+
+
+
+    }
 
