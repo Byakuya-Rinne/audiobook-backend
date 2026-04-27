@@ -1,15 +1,19 @@
 package com.atguigu.tingshu.common.threadpool;
 
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+
+@Configuration
 public class ThreadPoolConfig {
 
-
-    public ThreadPoolExecutor getThreadPoolExecutor(){
+    @Bean
+    public ThreadPoolExecutor threadPoolExecutor(){
         ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(
-                Runtime.getRuntime().availableProcessors(),
-                Runtime.getRuntime().availableProcessors(),
+                Runtime.getRuntime().availableProcessors() * 2,
+                Runtime.getRuntime().availableProcessors() * 2,
                 0,
                 TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(200),
