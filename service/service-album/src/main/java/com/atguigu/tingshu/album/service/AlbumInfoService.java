@@ -4,6 +4,7 @@ import com.atguigu.tingshu.model.album.AlbumInfo;
 import com.atguigu.tingshu.query.album.AlbumInfoQuery;
 import com.atguigu.tingshu.vo.album.AlbumInfoVo;
 import com.atguigu.tingshu.vo.album.AlbumListVo;
+import com.atguigu.tingshu.vo.album.AlbumStatVo;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 
@@ -25,4 +26,6 @@ public interface AlbumInfoService extends IService<AlbumInfo> {
     AlbumInfo getAlbumInfo(Long id);
 
     void updateAlbumInfo(Long id, AlbumInfoVo albumInfoVo);
+
+    AlbumStatVo getAlbumStatVo(Long albumId);
 }
