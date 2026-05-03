@@ -1,6 +1,7 @@
 package com.atguigu.tingshu.album.api;
 
 import cn.hutool.core.io.FileTypeUtil;
+import com.atguigu.tingshu.album.service.AlbumInfoService;
 import com.atguigu.tingshu.album.service.TrackInfoService;
 import com.atguigu.tingshu.common.execption.GuiguException;
 import com.atguigu.tingshu.common.login.GuiGuLogin;
@@ -9,6 +10,7 @@ import com.atguigu.tingshu.common.result.ResultCodeEnum;
 import com.atguigu.tingshu.common.util.AuthContextHolder;
 import com.atguigu.tingshu.model.album.TrackInfo;
 import com.atguigu.tingshu.query.album.TrackInfoQuery;
+import com.atguigu.tingshu.vo.album.AlbumTrackListVo;
 import com.atguigu.tingshu.vo.album.TrackInfoVo;
 import com.atguigu.tingshu.vo.album.TrackListVo;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -42,6 +44,9 @@ public class TrackInfoApiController {
 
 	@Autowired
 	private VodService vodService;
+
+	@Autowired
+	private AlbumInfoService albumInfoService;
 
 	/**
 	 * 音视频文件上传点播平台
@@ -154,6 +159,34 @@ public class TrackInfoApiController {
 		trackInfoService.removeTrackInfo(id);
 		return Result.ok();
 	}
+
+
+	/**
+	 * 如未登录，只返回声音列表
+	 * 如果用户已登录，根据当前用户身份、购买情况、专辑付费类型综合判断：付费标识
+	 * 分页获取专辑声音列表（动态判断付费标识）
+	 * @param albumId
+	 * @param page
+	 * @param limit
+	 * @return Page<AlbumTrackListVo>
+	 */
+	@GuiGuLogin(required = false)//如果已登录，则正常执行切面获取用户id的逻辑；如果未登录，则获取不到id，但能正常运行
+	@Operation(summary = "分页获取专辑声音列表（动态判断付费标识）")
+	@GetMapping("/trackInfo/findAlbumTrackPage/{albumId}/{page}/{limit}")
+	public Result<Page<AlbumTrackListVo>> findAlbumTrackPage(
+			@PathVariable Long albumId,
+			@PathVariable Long page,
+			@PathVariable Long limit
+	){
+		Page<AlbumTrackListVo> pageInfo = new Page<>(page, limit);
+		Long userId = AuthContextHolder.getUserId();
+		pageInfo = albumInfoService.findAlbumTrackPage(pageInfo, userId, albumId);
+		return Result.ok(pageInfo);
+	}
+
+
+
+
 
 
 

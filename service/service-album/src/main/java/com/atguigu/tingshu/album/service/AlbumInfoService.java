@@ -5,7 +5,9 @@ import com.atguigu.tingshu.query.album.AlbumInfoQuery;
 import com.atguigu.tingshu.vo.album.AlbumInfoVo;
 import com.atguigu.tingshu.vo.album.AlbumListVo;
 import com.atguigu.tingshu.vo.album.AlbumStatVo;
+import com.atguigu.tingshu.vo.album.AlbumTrackListVo;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
@@ -28,4 +30,6 @@ public interface AlbumInfoService extends IService<AlbumInfo> {
     void updateAlbumInfo(Long id, AlbumInfoVo albumInfoVo);
 
     AlbumStatVo getAlbumStatVo(Long albumId);
+
+    Page<AlbumTrackListVo> findAlbumTrackPage(Page<AlbumTrackListVo> pageInfo, Long userId, Long albumId);
 }

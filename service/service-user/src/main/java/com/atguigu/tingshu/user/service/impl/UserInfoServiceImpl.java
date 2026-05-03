@@ -4,6 +4,7 @@ import cn.binarywang.wx.miniapp.api.WxMaService;
 import cn.binarywang.wx.miniapp.api.WxMaUserService;
 import cn.binarywang.wx.miniapp.bean.WxMaJscode2SessionResult;
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.IdUtil;
 import com.atguigu.tingshu.common.constant.RedisConstant;
 import com.atguigu.tingshu.common.execption.GuiguException;
@@ -12,7 +13,11 @@ import com.atguigu.tingshu.common.rabbit.constant.MqConst;
 import com.atguigu.tingshu.common.rabbit.service.RabbitService;
 import com.atguigu.tingshu.common.result.ResultCodeEnum;
 import com.atguigu.tingshu.model.user.UserInfo;
+import com.atguigu.tingshu.model.user.UserPaidAlbum;
+import com.atguigu.tingshu.model.user.UserPaidTrack;
 import com.atguigu.tingshu.user.mapper.UserInfoMapper;
+import com.atguigu.tingshu.user.mapper.UserPaidAlbumMapper;
+import com.atguigu.tingshu.user.mapper.UserPaidTrackMapper;
 import com.atguigu.tingshu.user.service.UserInfoService;
 import com.atguigu.tingshu.vo.user.UserInfoVo;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -28,8 +33,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.atguigu.tingshu.common.result.ResultCodeEnum.FAIL;
 
@@ -46,10 +53,16 @@ public class UserInfoServiceImpl extends ServiceImpl<UserInfoMapper, UserInfo> i
 
 	@Autowired
 	private RabbitService rabbitService;
+
     @Qualifier("redisTemplate")
     @Autowired
     private RedisTemplate redisTemplate;
 
+	@Autowired
+	private UserPaidAlbumMapper userPaidAlbumMapper;
+
+	@Autowired
+	private UserPaidTrackMapper userPaidTrackMapper;
 
 	/**
 	 * 微信一键登录
@@ -149,6 +162,58 @@ public class UserInfoServiceImpl extends ServiceImpl<UserInfoMapper, UserInfo> i
 		}
 	}
 
+	/**
+	 * 查询指定用户某个专辑下声音购买状态
+	 *
+	 * @param userId                       用户ID
+	 * @param albumId                      专辑ID
+	 * @param needCheckPayStateTrackIdList 待检查购买状态声音ID列表
+	 * @return {声音ID：购买状态1(已购买) 0 (未购买)}
+	 */
+	@Override
+	public Map<Long, Integer> userIsPaidTrack(Long userId, Long albumId, List<Long> needCheckPayStatusTrackIdList) {
+		Map<Long, Integer> map = new HashMap<>();
 
+		//如果用户购买了整张专辑，则把传入的list全设为已购买
+			//查询用户是否已经购买本专辑
+		List<UserPaidAlbum> userPaidAlbums = userPaidAlbumMapper
+				.selectList(
+						new LambdaQueryWrapper<UserPaidAlbum>()
+								.eq(UserPaidAlbum::getUserId, userId)
+								.eq(UserPaidAlbum::getAlbumId, albumId));
+		//如果用户已经购买整个专辑，则把该专辑所属-所有需要检查付费状态的声音，全标为已购买
+		if (CollUtil.isNotEmpty(userPaidAlbums)){
+			needCheckPayStatusTrackIdList.stream().forEach(t->{
+				map.put(t,1);
+			});
+			return map;
+		}
 
+		//查询用户买过的本专辑声音
+		List<UserPaidTrack> userPaidTracks = userPaidTrackMapper.selectList(
+				new LambdaQueryWrapper<UserPaidTrack>()
+						.eq(UserPaidTrack::getUserId, userId)
+						.eq(UserPaidTrack::getAlbumId, albumId)
+						.select(UserPaidTrack::getTrackId));
+		List<Long> paidTrackIds = userPaidTracks.stream().map(track -> track.getTrackId()).collect(Collectors.toList());
+		if (CollUtil.isEmpty(paidTrackIds)){
+			//用户都没买
+			needCheckPayStatusTrackIdList.stream().forEach(t->{
+				map.put(t,0);
+			});
+			return map;
+		}
+		//如果传入的待检查声音，在购买过的本专辑声音里，则把它标为已购买
+		for (Long trackId : needCheckPayStatusTrackIdList) {
+			//遍历需要检查的id
+			if (paidTrackIds.contains(trackId)){
+				//如果需要检查的id在已购买的本专辑声音id里，则把该id放到map里，标记已购买
+				map.put(trackId,1);
+			}else {
+				//如果需要检查的id不在已购买的本专辑声音id里，则把该id放到map里，标记未购买
+				map.put(trackId,0);
+			}
+		}
+		return map;
+	}
 }
