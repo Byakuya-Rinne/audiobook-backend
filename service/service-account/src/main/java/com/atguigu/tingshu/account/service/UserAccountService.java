@@ -29,4 +29,5 @@ public interface UserAccountService extends IService<UserAccount> {
      */
     void saveUserAccountDetail(Long userId, String title, String tradeType, BigDecimal amount, String orderNo);
 
+    BigDecimal getAvailableAmount(Long userId);
 }
