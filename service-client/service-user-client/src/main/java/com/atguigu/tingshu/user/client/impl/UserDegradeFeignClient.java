@@ -2,6 +2,7 @@ package com.atguigu.tingshu.user.client.impl;
 
 
 import com.atguigu.tingshu.common.result.Result;
+import com.atguigu.tingshu.model.user.VipServiceConfig;
 import com.atguigu.tingshu.user.client.UserFeignClient;
 import com.atguigu.tingshu.vo.user.UserInfoVo;
 import lombok.extern.slf4j.Slf4j;
@@ -26,4 +27,9 @@ public class UserDegradeFeignClient implements UserFeignClient {
         return null;
     }
 
+    @Override
+    public Result<VipServiceConfig> getVipServiceConfig(Long id) {
+        log.error("[用户服务]提供远程调用getVipServiceConfig执行服务降级");
+        return null;
+    }
 }
