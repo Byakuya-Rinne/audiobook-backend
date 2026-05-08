@@ -216,4 +216,32 @@ public class UserInfoServiceImpl extends ServiceImpl<UserInfoMapper, UserInfo> i
 		}
 		return map;
 	}
+
+
+	@Override
+	public Boolean userIsPaidAlbum(Long userId, Long albumId) {
+		Long count = userPaidAlbumMapper.selectCount(
+				new LambdaQueryWrapper<UserPaidAlbum>()
+						.eq(UserPaidAlbum::getAlbumId, albumId)
+						.eq(UserPaidAlbum::getUserId, userId)
+		);
+		return count > 0;
+	}
+
+	@Override
+	public List<Long> findUserPaidTrackIdList(Long userId, Long albumId) {
+		List<UserPaidTrack> userPaidTrackList = userPaidTrackMapper.selectList(
+				new LambdaQueryWrapper<UserPaidTrack>()
+						.eq(UserPaidTrack::getAlbumId, albumId)
+						.eq(UserPaidTrack::getUserId, userId)
+						.select(UserPaidTrack::getTrackId)
+		);
+		if (CollUtil.isNotEmpty(userPaidTrackList)) {
+			List<Long> paidTrackIdList = userPaidTrackList.stream()
+					.map(UserPaidTrack::getTrackId)
+					.collect(Collectors.toList());
+			return paidTrackIdList;
+		}
+		return List.of();
+	}
 }

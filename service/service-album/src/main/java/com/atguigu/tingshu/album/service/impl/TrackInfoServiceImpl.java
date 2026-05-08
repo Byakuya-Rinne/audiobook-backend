@@ -14,6 +14,7 @@ import com.atguigu.tingshu.model.album.AlbumInfo;
 import com.atguigu.tingshu.model.album.TrackInfo;
 import com.atguigu.tingshu.model.album.TrackStat;
 import com.atguigu.tingshu.query.album.TrackInfoQuery;
+import com.atguigu.tingshu.user.client.UserFeignClient;
 import com.atguigu.tingshu.vo.album.TrackInfoVo;
 import com.atguigu.tingshu.vo.album.TrackListVo;
 import com.atguigu.tingshu.vo.album.TrackMediaInfoVo;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static com.atguigu.tingshu.common.constant.SystemConstant.*;
 
@@ -50,6 +52,8 @@ public class TrackInfoServiceImpl extends ServiceImpl<TrackInfoMapper, TrackInfo
 	@Autowired
 	private TrackStatMapper trackStatMapper;
 
+	@Autowired
+	UserFeignClient userFeignClient;
 
 	/**
 	 * 保存声音
@@ -267,12 +271,33 @@ public class TrackInfoServiceImpl extends ServiceImpl<TrackInfoMapper, TrackInfo
 	}
 
 
+	@Override
+	public List<TrackInfo> findPaidTrackInfoList(Long userId, Long trackId, Integer trackCount) {
+		//以用户选择声音作为起始，查询当前用户未购买声音列表，展示订单确认页
+		TrackInfo trackInfo = trackInfoMapper.selectById(trackId);
+		Long albumId = trackInfo.getAlbumId();
+		Integer orderNum = trackInfo.getOrderNum();
 
+		LambdaQueryWrapper<TrackInfo> wrapper = new LambdaQueryWrapper<TrackInfo>();
+		wrapper.ge(TrackInfo::getOrderNum, orderNum)
+				.eq(TrackInfo::getAlbumId, albumId);
 
+		//找出用户在本专辑中已经购买的所有声音，跳过已购买的
+		List<Long> paidTrackList = userFeignClient.findUserPaidTrackIdList(albumId).getData();
+		if (paidTrackList != null && paidTrackList.size() > 0) {
+			wrapper.notIn(TrackInfo::getId, paidTrackList);
+		}
 
+		//增加排序，限制返回数量,限制查询字段
+		wrapper.orderByAsc(TrackInfo::getOrderNum);
+		wrapper.last("limit " + trackCount);
+		wrapper.select(TrackInfo::getId,
+				TrackInfo::getAlbumId,
+				TrackInfo::getCoverUrl,
+				TrackInfo::getTrackIntro,
+				TrackInfo::getTrackTitle);
 
-
-
-
-
+		List<TrackInfo> trackInfoList = trackInfoMapper.selectList(wrapper);
+		return trackInfoList;
+	}
 }

@@ -7,6 +7,8 @@ import com.atguigu.tingshu.vo.album.TrackListVo;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 
+import java.util.List;
+
 public interface TrackInfoService extends IService<TrackInfo> {
 
     void saveTrackInfo(TrackInfoVo trackInfoVo, Long userId);
@@ -18,4 +20,6 @@ public interface TrackInfoService extends IService<TrackInfo> {
     Page<TrackListVo> findUserTrackPage(Page<TrackListVo> pageInfo, TrackInfoQuery trackInfoQuery);
 
     void removeTrackInfo(Long id);
+
+    List<TrackInfo> findPaidTrackInfoList(Long userId, Long trackId, Integer trackCount);
 }

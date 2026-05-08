@@ -16,4 +16,8 @@ public interface UserInfoService extends IService<UserInfo> {
     void updateUser(Long userId, UserInfoVo userInfoVo);
 
     Map<Long, Integer> userIsPaidTrack(Long userId, Long albumId, List<Long> needCheckPayStatusTrackIdList);
+
+    Boolean userIsPaidAlbum(Long userId, Long albumId);
+
+    List<Long> findUserPaidTrackIdList(Long userId, Long albumId);
 }

@@ -21,7 +21,7 @@ import java.util.Map;
  * @author atguigu
  */
 
-@FeignClient(value = "service-user", fallback = UserDegradeFeignClient.class)
+@FeignClient(value = "service-user", path = "/api/user", fallback = UserDegradeFeignClient.class)
 public interface UserFeignClient {
 
 
@@ -56,4 +56,23 @@ public interface UserFeignClient {
     public Result<VipServiceConfig> getVipServiceConfig(@PathVariable Long id);
 
 
-    }
+    /**
+     * 为了获取当前用户ID，确保调用方请求头比如有：token
+     * 判断当前用户是否购买指定专辑
+     * @param albumId
+     * @return 购买状态：true:已购买专辑、 false:未购买专辑
+     */
+    @GetMapping("/userInfo/isPaidAlbum/{albumId}")
+    public Result<Boolean> userIsPaidAlbum(@PathVariable Long albumId);
+
+
+    /**
+     * 根据专辑id+用户ID获取用户已购买声音id列表
+     * @param albumId
+     * @return
+     */
+    @GetMapping("/userInfo/findUserPaidTrackList/{albumId}")
+    public Result<List<Long>> findUserPaidTrackIdList(@PathVariable Long albumId);
+
+
+}

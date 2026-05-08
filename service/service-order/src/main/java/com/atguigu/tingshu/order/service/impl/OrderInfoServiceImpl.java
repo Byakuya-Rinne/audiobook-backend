@@ -1,12 +1,51 @@
 package com.atguigu.tingshu.order.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.lang.Assert;
+import cn.hutool.core.util.IdUtil;
+import com.atguigu.tingshu.account.AccountFeignClient;
+import com.atguigu.tingshu.album.AlbumFeignClient;
+import com.atguigu.tingshu.common.constant.RedisConstant;
+import com.atguigu.tingshu.common.execption.GuiguException;
+import com.atguigu.tingshu.common.util.AuthContextHolder;
+import com.atguigu.tingshu.common.util.Decimal2Serializer;
+import com.atguigu.tingshu.model.album.AlbumInfo;
+import com.atguigu.tingshu.model.album.TrackInfo;
 import com.atguigu.tingshu.model.order.OrderInfo;
+import com.atguigu.tingshu.model.user.VipServiceConfig;
+import com.atguigu.tingshu.order.helper.SignHelper;
 import com.atguigu.tingshu.order.mapper.OrderInfoMapper;
 import com.atguigu.tingshu.order.service.OrderInfoService;
+import com.atguigu.tingshu.user.client.UserFeignClient;
+import com.atguigu.tingshu.vo.order.OrderDerateVo;
+import com.atguigu.tingshu.vo.order.OrderDetailVo;
+import com.atguigu.tingshu.vo.order.OrderInfoVo;
+import com.atguigu.tingshu.vo.order.TradeVo;
+import com.atguigu.tingshu.vo.user.UserInfoVo;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.NotEmpty;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+import static com.atguigu.tingshu.common.constant.SystemConstant.*;
 
 @Slf4j
 @Service
@@ -15,6 +54,263 @@ public class OrderInfoServiceImpl extends ServiceImpl<OrderInfoMapper, OrderInfo
 
     @Autowired
     private OrderInfoMapper orderInfoMapper;
+
+    @Autowired
+    private UserFeignClient userFeignClient;
+
+    @Autowired
+    private AlbumFeignClient albumFeignClient;
+
+    @Autowired
+    private RedisTemplate redisTemplate;
+
+    @Autowired
+    private AccountFeignClient accountFeignClient;
+
+    /**
+     * 三种商品（VIP会员、专辑、声音）订单结算,渲染订单结算页面
+     *
+     * @param tradeVo (购买项目类型、购买项目ID、声音数量)
+     * @return 订单VO信息
+     */
+    @Override
+    public OrderInfoVo trade(TradeVo tradeVo) {
+        /*
+        TradeVo：
+            @Schema(description = "付款项目类型: 1001-专辑 1002-声音 1003-vip会员", requiredMode = Schema.RequiredMode.REQUIRED)
+            private String itemType;
+            @Schema(description = "付款项目类型Id", requiredMode = Schema.RequiredMode.REQUIRED)
+            private Long itemId;
+            @Schema(description = "针对声音购买，购买当前集往后多少集", required = false)
+            private Integer trackCount;
+         */
+
+        /*
+        OrderInfoVo：
+            @Schema(description = "交易号", requiredMode = Schema.RequiredMode.REQUIRED)
+            private String tradeNo;
+
+            @Schema(description = "支付方式：1101-微信 1102-支付宝 1103-账户余额", requiredMode = Schema.RequiredMode.REQUIRED)
+            private String payWay;
+
+            @Schema(description = "付款项目类型: 1001-专辑 1002-声音 1003-vip会员", requiredMode = Schema.RequiredMode.REQUIRED)
+            private String itemType;
+
+            @Schema(description = "订单原始金额", requiredMode = Schema.RequiredMode.REQUIRED)
+            private BigDecimal originalAmount;
+
+            @Schema(description = "减免总金额", requiredMode = Schema.RequiredMode.REQUIRED)
+            private BigDecimal derateAmount;
+
+            @Schema(description = "订单总金额", requiredMode = Schema.RequiredMode.REQUIRED)
+            private BigDecimal orderAmount;
+
+            @Schema(description = "订单明细列表", requiredMode = Schema.RequiredMode.REQUIRED)
+            private List<OrderDetailVo> orderDetailVoList;
+
+            @Schema(description = "订单减免明细列表")
+            private List<OrderDerateVo> orderDerateVoList;
+
+            @Schema(description = "时间戳", requiredMode = Schema.RequiredMode.REQUIRED)
+            private Long timestamp;
+
+            @Schema(description = "签名", requiredMode = Schema.RequiredMode.REQUIRED)
+            private String sign;
+         */
+        Long userId = AuthContextHolder.getUserId();
+
+        OrderInfoVo orderInfoVo = new OrderInfoVo();
+        orderInfoVo.setItemType(tradeVo.getItemType());
+        orderInfoVo.setDerateAmount(BigDecimal.ZERO);
+
+        //声明2个集合：商品明细、优惠列表
+        List<OrderDetailVo> orderDetailVoList = new ArrayList<>();
+        List<OrderDerateVo> orderDerateVoList = new ArrayList<>();
+        orderInfoVo.setOrderDerateVoList(orderDerateVoList);
+        orderInfoVo.setOrderDetailVoList(orderDetailVoList);
+
+        //处理不同要买的东西：
+        //ORDER_ITEM_TYPE_VIP   ORDER_ITEM_TYPE_ALBUM   ORDER_ITEM_TYPE_TRACK
+        if (ORDER_ITEM_TYPE_VIP.equals(tradeVo.getItemType())){
+            VipServiceConfig vipServiceConfig = userFeignClient.getVipServiceConfig(tradeVo.getItemId()).getData();
+            Assert.notNull(vipServiceConfig, "套餐：{}不存在", tradeVo.getItemId());
+            BigDecimal price = vipServiceConfig.getPrice();//原价
+            BigDecimal discountPrice = vipServiceConfig.getDiscountPrice();//折后价
+
+            orderInfoVo.setOriginalAmount(price);
+            orderInfoVo.setOrderAmount(discountPrice);
+
+            OrderDetailVo orderDetailVo = new OrderDetailVo();
+            orderDetailVo.setItemId(tradeVo.getItemId());
+            orderDetailVo.setItemPrice(price);//订单细节price填原价
+            orderDetailVo.setItemUrl(vipServiceConfig.getImageUrl());//图片链接url
+            orderDetailVo.setItemName("套餐：" + vipServiceConfig.getName());
+            orderDetailVoList.add(orderDetailVo);
+            orderInfoVo.setOrderDetailVoList(orderDetailVoList);
+
+            BigDecimal agio = price.subtract(discountPrice);
+            //差价不等于0，发生了折扣，否则没有折扣
+            if (agio.compareTo(BigDecimal.ZERO) != 0){
+                orderInfoVo.setDerateAmount(agio);
+
+                OrderDerateVo orderDerateVo = new OrderDerateVo();
+                orderDerateVo.setDerateAmount(agio);
+                orderDerateVo.setDerateType(ORDER_DERATE_VIP_SERVICE_DISCOUNT);
+                orderDerateVo.setRemarks("限时套餐优惠");
+                orderDerateVoList.add(orderDerateVo);
+                orderInfoVo.setOrderDerateVoList(orderDerateVoList);
+
+            }
+
+        }else if (ORDER_ITEM_TYPE_ALBUM.equals(tradeVo.getItemType())){
+            //处理项目类型是：专辑
+            //远程调用"用户服务"判断是否重复购买专辑
+            Boolean isPaidAlbum = userFeignClient.userIsPaidAlbum(tradeVo.getItemId()).getData();
+            if (isPaidAlbum){//用户买过这个专辑了
+                throw new GuiguException(500, "您已购买本专辑，请勿他妈的重复购买");
+            }//没买，现在买
+
+            //远程调用"专辑"服务获取专辑信息,得到价格、以及折扣（普通用户，VIP折扣）
+            AlbumInfo albumInfo = albumFeignClient.getAlbumInfo(tradeVo.getItemId()).getData();
+            BigDecimal price = albumInfo.getPrice();
+            BigDecimal discount = albumInfo.getDiscount();//普通用户折扣
+            BigDecimal vipDiscount = albumInfo.getVipDiscount();//VIP用户折扣
+            BigDecimal derateAmount = BigDecimal.valueOf(0l);//优惠了多少钱
+
+            //封装"商品"相关价格
+            BigDecimal originalAmount = price;
+            BigDecimal orderAmount = originalAmount;
+
+            //远程调用"用户服务"获取用户身份用于确认折扣信息
+            if (vipDiscount != null && (!(new BigDecimal("-1").equals(vipDiscount)))){//VIP有特殊打折才去查用户是不是vip
+                UserInfoVo userInfoVo = userFeignClient.getUserInfoVo(userId).getData();
+                Assert.notNull(userInfoVo, "用户：{}不存在", userId);
+                Boolean isVIP = false;
+                //如果用户是VIP，且他妈的过期时间比现在晚
+                if (userInfoVo.getIsVip().intValue() == 1
+                        && userInfoVo.getVipExpireTime().after(new Date())) {
+                    isVIP = true;
+                }
+                //如果存在会员用户折扣且当前用户为VIP用户
+                if (isVIP){
+                    orderAmount = originalAmount.multiply(vipDiscount)
+                            .divide(new BigDecimal("10"), 2, RoundingMode.HALF_UP);
+                    derateAmount = originalAmount.subtract(orderAmount);
+                }
+            }
+
+            //如果VIP不享受折扣，而普通用户享受折扣，则VIP也享受普通用户的折扣
+            //如果orderAmount等于originalAmount，说明已未享受VIP折扣，进入普通用户路线，否则跳过
+            if (orderAmount.equals(originalAmount)){
+                //如果存在普通用户折扣
+                if (discount != null && (!(new BigDecimal("-1").equals(discount)))){
+                    orderAmount = originalAmount.multiply(discount)
+                            .divide(new BigDecimal("10"), 2, RoundingMode.HALF_UP);
+                    derateAmount = originalAmount.subtract(orderAmount);
+                }
+            }
+
+            //封装"商品"列表及商品优惠列表
+            OrderDetailVo orderDetailVo = new OrderDetailVo();
+            orderDetailVo.setItemId(tradeVo.getItemId());
+            orderDetailVo.setItemName("专辑：" + albumInfo.getAlbumTitle());
+            orderDetailVo.setItemUrl(albumInfo.getCoverUrl());
+            orderDetailVo.setItemPrice(originalAmount);
+            orderDetailVoList.add(orderDetailVo);
+
+            //封装优惠细节list，如果有优惠才往里装，没有就空着
+            if ( new BigDecimal(0L).compareTo(derateAmount) > 0 ){
+                OrderDerateVo orderDerateVo = new OrderDerateVo();
+                orderDerateVo.setDerateType(ORDER_DERATE_ALBUM_DISCOUNT);
+                orderDerateVo.setDerateAmount(derateAmount);
+                orderDerateVo.setRemarks("专辑限时优惠");
+                orderDerateVoList.add(orderDerateVo);
+            }
+
+            orderInfoVo.setOriginalAmount(originalAmount);
+            orderInfoVo.setOrderAmount(orderAmount);
+            orderInfoVo.setDerateAmount(derateAmount);
+
+        }else if (ORDER_ITEM_TYPE_TRACK.equals(tradeVo.getItemType())){
+            //处理项目类型是：声音
+            //远程调用"专辑服务"获取待购买声音列表，将声音作为商品展示结算页
+            Long trackId = tradeVo.getItemId();
+            List<TrackInfo> waitBuyTrackInfoList = albumFeignClient.findPaidTrackInfoList(trackId, tradeVo.getTrackCount()).getData();
+            Assert.notNull(waitBuyTrackInfoList, "暂无结算声音");
+
+            Long albumId = waitBuyTrackInfoList.get(0).getAlbumId();
+            AlbumInfo albumInfo = albumFeignClient.getAlbumInfo(albumId).getData();
+            //如果是购买单集，则priceType就是按单集购买的类型，且price是单集价格
+            BigDecimal trackPrice = albumInfo.getPrice();
+
+            //订单总价格就是待购买单集数量*单集价格
+            //声音不支持折扣，优惠价0，最后价格=原价
+            BigDecimal totalPrice = BigDecimal.valueOf(waitBuyTrackInfoList.size()).multiply(trackPrice);
+            orderInfoVo.setOrderAmount(totalPrice);
+            orderInfoVo.setOrderAmount(totalPrice);
+            orderInfoVo.setDerateAmount(BigDecimal.ZERO);
+            orderInfoVo.setOrderDerateVoList(List.of());
+
+            orderDetailVoList = waitBuyTrackInfoList.stream()
+                    .map(trackInfo -> {
+                        OrderDetailVo orderDetailVo = new OrderDetailVo();
+                        orderDetailVo.setItemPrice(trackPrice);
+                        orderDetailVo.setItemId(trackInfo.getId());
+                        orderDetailVo.setItemUrl(trackInfo.getCoverUrl());
+                        orderDetailVo.setItemName("声音：" + trackInfo.getTrackTitle());
+                        return orderDetailVo;
+                    })
+                    .collect(Collectors.toList());
+
+            orderInfoVo.setOrderDetailVoList(orderDetailVoList);
+        }
+/*
+        @Schema(description = "交易号", requiredMode = Schema.RequiredMode.REQUIRED)
+        private String tradeNo;
+
+        @Schema(description = "支付方式：1101-微信 1102-支付宝 1103-账户余额", requiredMode = Schema.RequiredMode.REQUIRED)
+        private String payWay;
+
+        @Schema(description = "时间戳", requiredMode = Schema.RequiredMode.REQUIRED)
+        private Long timestamp;
+
+        @Schema(description = "签名", requiredMode = Schema.RequiredMode.REQUIRED)
+        private String sign;
+*/
+
+        //生成订单流水号，作用：防止重复提交订单，五分钟过期
+        String tradeKey = RedisConstant.ORDER_TRADE_NO_PREFIX + userId;
+        String tradeNo = IdUtil.fastUUID();
+
+        redisTemplate.opsForValue().set(tradeKey, tradeNo, 5, TimeUnit.MINUTES);
+        orderInfoVo.setTradeNo(tradeNo);
+        orderInfoVo.setTimestamp(System.currentTimeMillis());
+
+
+        Map<String, Object> map = BeanUtil.beanToMap(orderInfoVo, false, true);
+        String sign = SignHelper.getSign(map);
+        orderInfoVo.setSign(sign);
+
+        return orderInfoVo;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 }

@@ -186,7 +186,23 @@ public class TrackInfoApiController {
 
 
 
-
+	/**
+	 * 以用户选择声音作为起始，查询当前用户未购买声音列表，展示订单确认页
+	 * @param trackId
+	 * @param trackCount
+	 * @return
+	 */
+	@GuiGuLogin
+	@Operation(summary = "以用户选择声音作为起始，查询当前用户未购买声音列表，展示订单确认页")
+	@GetMapping("/trackInfo/findPaidTrackInfoList/{trackId}/{trackCount}")
+	public Result<List<TrackInfo>> findPaidTrackInfoList(@PathVariable Long trackId, @PathVariable Integer trackCount){
+		//1.获取当前用户ID
+		Long userId = AuthContextHolder.getUserId();
+		//2.调用业务层
+		List<TrackInfo> list = trackInfoService.findPaidTrackInfoList(userId, trackId, trackCount);
+		//3.返回结果
+		return Result.ok(list);
+	}
 
 
 

@@ -3,10 +3,13 @@ import com.atguigu.tingshu.album.impl.AlbumDegradeFeignClient;
 import com.atguigu.tingshu.common.result.Result;
 import com.atguigu.tingshu.model.album.AlbumInfo;
 import com.atguigu.tingshu.model.album.BaseCategoryView;
+import com.atguigu.tingshu.model.album.TrackInfo;
 import com.atguigu.tingshu.vo.album.AlbumStatVo;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+
+import java.util.List;
 
 /**
  * 专辑模块远程调用Feign接口,底层产生代理对象发起Http请求调用
@@ -58,5 +61,13 @@ public interface AlbumFeignClient {
     @GetMapping("/albumInfo/getAlbumStatVo/{albumId}")
     public Result<AlbumStatVo> getAlbumStatVo(@PathVariable Long albumId);
 
+    /**
+     * 以用户选择声音作为起始，查询当前用户未购买声音列表，展示订单确认页
+     * @param trackId
+     * @param trackCount
+     * @return
+     */
+    @GetMapping("/trackInfo/findPaidTrackInfoList/{trackId}/{trackCount}")
+    public Result<List<TrackInfo>> findPaidTrackInfoList(@PathVariable Long trackId, @PathVariable Integer trackCount);
 
 }
