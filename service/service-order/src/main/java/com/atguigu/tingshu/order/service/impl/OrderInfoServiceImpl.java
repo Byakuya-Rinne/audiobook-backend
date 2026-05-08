@@ -2,6 +2,7 @@ package com.atguigu.tingshu.order.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.IdUtil;
 import com.atguigu.tingshu.account.AccountFeignClient;
@@ -9,13 +10,16 @@ import com.atguigu.tingshu.album.AlbumFeignClient;
 import com.atguigu.tingshu.common.constant.RedisConstant;
 import com.atguigu.tingshu.common.execption.GuiguException;
 import com.atguigu.tingshu.common.util.AuthContextHolder;
-import com.atguigu.tingshu.common.util.Decimal2Serializer;
 import com.atguigu.tingshu.model.album.AlbumInfo;
 import com.atguigu.tingshu.model.album.TrackInfo;
+import com.atguigu.tingshu.model.order.OrderDerate;
+import com.atguigu.tingshu.model.order.OrderDetail;
 import com.atguigu.tingshu.model.order.OrderInfo;
 import com.atguigu.tingshu.model.user.VipServiceConfig;
 import com.atguigu.tingshu.order.helper.SignHelper;
 import com.atguigu.tingshu.order.mapper.OrderInfoMapper;
+import com.atguigu.tingshu.order.service.OrderDerateService;
+import com.atguigu.tingshu.order.service.OrderDetailService;
 import com.atguigu.tingshu.order.service.OrderInfoService;
 import com.atguigu.tingshu.user.client.UserFeignClient;
 import com.atguigu.tingshu.vo.order.OrderDerateVo;
@@ -24,17 +28,10 @@ import com.atguigu.tingshu.vo.order.OrderInfoVo;
 import com.atguigu.tingshu.vo.order.TradeVo;
 import com.atguigu.tingshu.vo.user.UserInfoVo;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.DecimalMax;
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Digits;
-import jakarta.validation.constraints.NotEmpty;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -66,6 +63,12 @@ public class OrderInfoServiceImpl extends ServiceImpl<OrderInfoMapper, OrderInfo
 
     @Autowired
     private AccountFeignClient accountFeignClient;
+
+    @Autowired
+    private OrderDetailService orderDetailService;
+
+    @Autowired
+    private OrderDerateService orderDerateService;
 
     /**
      * 三种商品（VIP会员、专辑、声音）订单结算,渲染订单结算页面
@@ -295,10 +298,125 @@ public class OrderInfoServiceImpl extends ServiceImpl<OrderInfoMapper, OrderInfo
     }
 
 
+    /**
+     * 提交/结算订单（处理余额支付逻辑）
+     *
+     * @param userId      用户ID
+     * @param orderInfoVo 订单vo信息
+     * @return {"orderNo":"本次订单保存后订单编号"} 用于后续对接微信支付或者展示订单详情
+     */
+    @Override
+    public Map<String, String> submitOrder(Long userId, OrderInfoVo orderInfoVo) {
+        //校验流水号
+        //前端传入流水号，去redis查传入的和里面的是不是一样
+        //一样就是没重复提交，用完删掉；否则不一样就是重复提交订单，报错
+        String tradeNo = orderInfoVo.getTradeNo();
+        String tradeKey = RedisConstant.ORDER_TRADE_NO_PREFIX + userId;
+        String lua = "if redis.call(\"get\",KEYS[1]) == ARGV[1]\n" +
+                "then\n" +
+                "    return redis.call(\"del\",KEYS[1])\n" +
+                "else\n" +
+                "    return 0\n" +
+                "end";
+
+        DefaultRedisScript<Long> script = new DefaultRedisScript(lua, Long.class);
+        Long result =  (Long) redisTemplate.execute(script, CollUtil.toList(tradeKey), tradeNo);
+        if (result.intValue() == 0) {
+            throw new GuiguException(500, "流水号校验失败");
+        }
+
+        //校验签名
+//        Map<String, Object> map = BeanUtil.beanToMap(orderInfoVo, false, true);
+//        String sign = SignHelper.getSign(map);
+//        orderInfoVo.setSign(sign);
+        //使用之前加签名一样方式，获得新签名
+        Map<String, Object> map = BeanUtil.beanToMap(orderInfoVo, false, true);
+        //之前没有带payWay，这次也不能带
+        map.remove("payWay");
+        //调用工具类验证签名
+        SignHelper.checkSign(map);
+
+        //校验通过
+        //保存订单
+        this.saveOrderInfo()
 
 
 
 
+
+
+
+
+    }
+
+
+
+
+
+    /**
+     * 保存订单信息
+     *
+     * @param userId      用户ID
+     * @param orderInfoVo 订单VO信息
+     * @return 订单对象
+     */
+    @Override
+    public OrderInfo saveOrderInfo(Long userId, OrderInfoVo orderInfoVo) {
+        //保存订单信息
+
+        //将订单VO转为订单PO对象
+        OrderInfo orderInfo = BeanUtil.copyProperties(orderInfoVo, OrderInfo.class);
+        orderInfo.setUserId(userId);
+
+        List<OrderDetailVo> orderDetailVoList = orderInfoVo.getOrderDetailVoList();
+        if (CollUtil.isNotEmpty(orderDetailVoList)) {
+            String itemName = orderDetailVoList.get(0).getItemName();
+            orderInfo.setOrderTitle(itemName);
+        }
+
+        //设置订单序号 要求：全局唯一趋势递增 形式=日期+雪花算法
+        String orderNo = DateUtil.today().replaceAll("-", "") + IdUtil.getSnowflakeNextId();
+        orderInfo.setOrderNo(orderNo);
+        //设置订单状态：订单状态：0901-未支付 0902-已支付 0903-已取消
+        orderInfo.setOrderStatus(ORDER_STATUS_UNPAID);
+        //先保存不完整的订单信息 得到订单ID，后面再补充细节
+        orderInfoMapper.insert(orderInfo);
+        Long orderId = orderInfo.getId();
+
+
+        //	private List<OrderDetail> orderDetailList;
+        //	private List<OrderDerate> orderDerateList;
+
+        if (CollUtil.isNotEmpty(orderDetailVoList)){
+            List<OrderDetail> orderDetailList = orderDetailVoList.stream()
+                    .map(vo -> {
+                        OrderDetail orderDetail = BeanUtil.copyProperties(vo, OrderDetail.class);
+                        orderDetail.setOrderId(orderId);
+                        return orderDetail;
+                    }).collect(Collectors.toList());
+            orderDetailService.saveBatch(orderDetailList);
+            orderInfo.setOrderDetailList(orderDetailList);
+        }
+
+
+        //专辑和VIP才有折扣，买单曲没有
+        List<OrderDerateVo> orderDerateVoList = orderInfoVo.getOrderDerateVoList();
+        if (CollUtil.isNotEmpty(orderDerateVoList)){
+            List<OrderDerate> orderDerateList = orderDerateVoList.stream()
+                    .map(vo -> {
+                        OrderDerate orderDerate = BeanUtil.copyProperties(vo, OrderDerate.class);
+                                orderDerate.setOrderId(orderId);
+                                return orderDerate;
+                            }
+                    ).collect(Collectors.toList());
+            orderDerateService.saveBatch(orderDerateList);
+            orderInfo.setOrderDerateList(orderDerateList);
+        }else {
+            orderInfo.setOrderDerateList(List.of());
+        }
+
+        return orderInfo;
+    }
 
 
 
