@@ -5,9 +5,13 @@ import com.atguigu.tingshu.account.mapper.UserAccountDetailMapper;
 import com.atguigu.tingshu.account.mapper.UserAccountMapper;
 import com.atguigu.tingshu.account.service.UserAccountService;
 import com.atguigu.tingshu.common.constant.SystemConstant;
+import com.atguigu.tingshu.common.execption.GuiguException;
+import com.atguigu.tingshu.common.util.AuthContextHolder;
 import com.atguigu.tingshu.model.account.UserAccount;
 import com.atguigu.tingshu.model.account.UserAccountDetail;
+import com.atguigu.tingshu.vo.account.AccountDeductVo;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -84,4 +88,47 @@ public class UserAccountServiceImpl extends ServiceImpl<UserAccountMapper, UserA
 		BigDecimal availableAmount = userAccount.getAvailableAmount();
 		return availableAmount;
 	}
+
+
+
+	@Override
+	public void checkAndDeduct(AccountDeductVo accountDeductVo) {
+		BigDecimal deductAmount = accountDeductVo.getAmount();
+		Long userId = AuthContextHolder.getUserId();
+
+		//扣减账户余额
+		//为了避免并发事务对同一条账户记录造成“超扣”问题，采用MySQL悲观锁 select SQL+for update; 其他并发事务无法操作记录
+		UserAccount userAccount = userAccountMapper.selectAccountWithLock(userId, deductAmount);
+		if (userAccount == null) {
+			throw new GuiguException(500, "余额不足，穷B");
+		}
+
+		//扣减账户余额
+		int update = userAccountMapper.update(null,
+				new LambdaUpdateWrapper<UserAccount>()
+						.set(UserAccount::getAvailableAmount, userAccount.getAvailableAmount().subtract(deductAmount))
+						.set(UserAccount::getTotalAmount, userAccount.getTotalAmount().subtract(deductAmount))
+						.set(UserAccount::getTotalPayAmount, userAccount.getTotalPayAmount().add(deductAmount))
+						.eq(UserAccount::getUserId, userId)
+		);
+		if (update < 1) {
+			throw new GuiguException(500, "扣减余额失败！！！");
+		}
+
+		//新值账户变动日志
+		this.saveUserAccountDetail(
+				accountDeductVo.getUserId(),
+				accountDeductVo.getContent(),
+				SystemConstant.ACCOUNT_TRADE_TYPE_MINUS,
+				accountDeductVo.getAmount(),
+				accountDeductVo.getOrderNo()
+		);
+	}
+
+
+
+
+
+
+
 }

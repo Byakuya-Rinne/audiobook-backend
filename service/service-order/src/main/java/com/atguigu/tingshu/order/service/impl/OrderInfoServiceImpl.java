@@ -9,6 +9,8 @@ import com.atguigu.tingshu.account.AccountFeignClient;
 import com.atguigu.tingshu.album.AlbumFeignClient;
 import com.atguigu.tingshu.common.constant.RedisConstant;
 import com.atguigu.tingshu.common.execption.GuiguException;
+import com.atguigu.tingshu.common.rabbit.service.RabbitService;
+import com.atguigu.tingshu.common.result.Result;
 import com.atguigu.tingshu.common.util.AuthContextHolder;
 import com.atguigu.tingshu.model.album.AlbumInfo;
 import com.atguigu.tingshu.model.album.TrackInfo;
@@ -22,14 +24,17 @@ import com.atguigu.tingshu.order.service.OrderDerateService;
 import com.atguigu.tingshu.order.service.OrderDetailService;
 import com.atguigu.tingshu.order.service.OrderInfoService;
 import com.atguigu.tingshu.user.client.UserFeignClient;
+import com.atguigu.tingshu.vo.account.AccountDeductVo;
 import com.atguigu.tingshu.vo.order.OrderDerateVo;
 import com.atguigu.tingshu.vo.order.OrderDetailVo;
 import com.atguigu.tingshu.vo.order.OrderInfoVo;
 import com.atguigu.tingshu.vo.order.TradeVo;
 import com.atguigu.tingshu.vo.user.UserInfoVo;
+import com.atguigu.tingshu.vo.user.UserPaidRecordVo;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
@@ -43,6 +48,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.atguigu.tingshu.common.constant.SystemConstant.*;
+import static com.atguigu.tingshu.common.rabbit.constant.MqConst.EXCHANGE_CANCEL_ORDER;
+import static com.atguigu.tingshu.common.rabbit.constant.MqConst.ROUTING_CANCEL_ORDER;
 
 @Slf4j
 @Service
@@ -69,6 +76,12 @@ public class OrderInfoServiceImpl extends ServiceImpl<OrderInfoMapper, OrderInfo
 
     @Autowired
     private OrderDerateService orderDerateService;
+
+    @Autowired
+    private RabbitService rabbitService;
+
+    @Value("${order.cancel}")
+    private Integer cancelOrderTTL;
 
     /**
      * 三种商品（VIP会员、专辑、声音）订单结算,渲染订单结算页面
@@ -320,8 +333,8 @@ public class OrderInfoServiceImpl extends ServiceImpl<OrderInfoMapper, OrderInfo
                 "end";
 
         DefaultRedisScript<Long> script = new DefaultRedisScript(lua, Long.class);
-        Long result =  (Long) redisTemplate.execute(script, CollUtil.toList(tradeKey), tradeNo);
-        if (result.intValue() == 0) {
+        Long redisResult =  (Long) redisTemplate.execute(script, CollUtil.toList(tradeKey), tradeNo);
+        if (redisResult.intValue() == 0) {
             throw new GuiguException(500, "流水号校验失败");
         }
 
@@ -338,15 +351,58 @@ public class OrderInfoServiceImpl extends ServiceImpl<OrderInfoMapper, OrderInfo
 
         //校验通过
         //保存订单
-        this.saveOrderInfo()
+        OrderInfo orderInfo = this.saveOrderInfo(userId, orderInfoVo);
 
+        //如果支付方式为余额支付 立即扣减账户余额、余额扣减修改订单状态：已支付 并且发放权益
+        //支付方式：1101-微信 1102-支付宝 1103-账户余额
+        String payWay = orderInfoVo.getPayWay();
 
+        //余额
+        if (ORDER_PAY_ACCOUNT.equals(payWay)) {
+            //远程调用"账户服务"扣减账户余额
+            AccountDeductVo vo = new AccountDeductVo();
+            vo.setOrderNo(orderInfo.getOrderNo());
+            vo.setAmount(orderInfo.getOrderAmount());
+            vo.setUserId(userId);
+            vo.setContent(orderInfo.getOrderTitle());
 
+            Result accountFeignResult = accountFeignClient.checkAndDeduct(vo);
 
+            if ( accountFeignResult.getCode() != 200){
+                throw new GuiguException(accountFeignResult.getCode(), accountFeignResult.getMessage());
+            }
 
+            //余额扣减成功，将订单状态改为：已支付
+            orderInfo.setOrderStatus(ORDER_STATUS_PAID);
+            orderInfoMapper.updateById(orderInfo);
 
+            //远程调用"用户服务"进行相关权益发放（虚拟物品发货）
+            //创建用于虚拟物品发货vo对象
+            UserPaidRecordVo userPaidRecordVo = new UserPaidRecordVo();
+            userPaidRecordVo.setOrderNo(orderInfo.getOrderNo());
+            userPaidRecordVo.setUserId(orderInfo.getUserId());
+            userPaidRecordVo.setItemType(orderInfo.getItemType());
+            List<OrderDetailVo> orderDetailVoList = orderInfoVo.getOrderDetailVoList();
+            if (CollUtil.isNotEmpty(orderDetailVoList)) {
+                List<Long> itemIdList = orderDetailVoList.stream().map(orderDetailVo -> {
+                    Long itemId = orderDetailVo.getItemId();
+                    return itemId;
+                }).collect(Collectors.toList());
+                userPaidRecordVo.setItemIdList(itemIdList);
+                Result result = userFeignClient.savePaidRecord(userPaidRecordVo);
+                //4.3.3 判断业务状态码是否为200
+                if (result.getCode() != 200){
+                    throw new GuiguException(result.getCode(), result.getMessage());
+                }
+            }
+        }//余额支付处理完成
 
+        //5.无论是哪种付款方式，采用延迟消息自动将超时未支付订单取消掉  自动关单时间阈值：15分钟
+        //方案一：采用RabbitMQ延迟消息  方案二:采用定时任务  方案三：不做处理 当进行查询判断订单是否过期
+        rabbitService.sendDealyMessage(EXCHANGE_CANCEL_ORDER, ROUTING_CANCEL_ORDER, orderInfo.getId(), cancelOrderTTL);
 
+        //6.返回本次订单订单编号，用于后续支付成功后查询订单、或者基于订单编号对接微信支付
+        return Map.of("orderNo", orderInfo.getOrderNo());
     }
 
 

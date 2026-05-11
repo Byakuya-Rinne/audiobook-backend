@@ -27,7 +27,7 @@ import java.util.List;
  * 专辑模块远程调用Feign接口
  */
 //OpenFeign拿value去Nacos注册中心里找
-@FeignClient(value = "service-album", fallback = AlbumDegradeFeignClient.class)
+@FeignClient(value = "service-album", path = "api/album", fallback = AlbumDegradeFeignClient.class)
 public interface AlbumFeignClient {
     //baseUrl=http://service-album = http://192.168.31.21:8501
     // 客户端从Nacos拉取到目标服务可用实例列表进行负载均衡（默认策略轮询）
@@ -69,5 +69,16 @@ public interface AlbumFeignClient {
      */
     @GetMapping("/trackInfo/findPaidTrackInfoList/{trackId}/{trackCount}")
     public Result<List<TrackInfo>> findPaidTrackInfoList(@PathVariable Long trackId, @PathVariable Integer trackCount);
+
+
+    /**
+     * 根据声音ID查询声音信息
+     * @param id
+     * @return
+     */
+    @GetMapping("/trackInfo/getTrackInfo/{id}")
+    public Result<TrackInfo> getTrackInfo(@PathVariable Long id);
+
+
 
 }
