@@ -3,6 +3,8 @@ package com.atguigu.tingshu.account.service.impl;
 import com.atguigu.tingshu.account.mapper.RechargeInfoMapper;
 import com.atguigu.tingshu.account.service.RechargeInfoService;
 import com.atguigu.tingshu.model.account.RechargeInfo;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -14,4 +16,12 @@ public class RechargeInfoServiceImpl extends ServiceImpl<RechargeInfoMapper, Rec
 	@Autowired
 	private RechargeInfoMapper rechargeInfoMapper;
 
+	@Override
+	public RechargeInfo getRechargeInfo(String orderNo) {
+		RechargeInfo rechargeInfo = rechargeInfoMapper.selectOne(
+				new LambdaQueryWrapper<RechargeInfo>()
+						.eq(RechargeInfo::getOrderNo, orderNo)
+		);
+		return rechargeInfo;
+	}
 }

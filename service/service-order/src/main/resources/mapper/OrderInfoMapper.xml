@@ -5,6 +5,28 @@
 <mapper namespace="com.atguigu.tingshu.order.mapper.OrderInfoMapper">
 
 
+    <resultMap id="findUserPageMap" type="com.atguigu.tingshu.model.order.OrderInfo" autoMapping="true">
+        <id property="id" column="id"></id>
+        <collection property="orderDetailList" column="id" select="getDetailById"></collection>
+    </resultMap>
 
+    <select id="getDetailById" resultType="com.atguigu.tingshu.model.order.OrderDetail">
+        select id,item_id,item_name,item_price,item_url from order_detail where order_id = #{id}
+    </select>
+
+
+    <select id="findUserPage" resultMap="findUserPageMap">
+        select oi.id,
+               oi.order_no,
+               oi.order_status,
+               oi.original_amount,
+               oi.derate_amount,
+               oi.order_amount,
+               oi.pay_way
+        from order_info oi
+        where user_id = #{userId}
+          and oi.is_deleted = 0
+        order by oi.id desc
+    </select>
 </mapper>
 

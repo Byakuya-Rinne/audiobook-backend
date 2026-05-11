@@ -31,8 +31,12 @@ import com.atguigu.tingshu.vo.order.OrderInfoVo;
 import com.atguigu.tingshu.vo.order.TradeVo;
 import com.atguigu.tingshu.vo.user.UserInfoVo;
 import com.atguigu.tingshu.vo.user.UserPaidRecordVo;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.ibatis.annotations.Param;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -40,10 +44,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -474,17 +475,114 @@ public class OrderInfoServiceImpl extends ServiceImpl<OrderInfoMapper, OrderInfo
         return orderInfo;
     }
 
+    /**
+     * 根据订单编号查询订单详情（包含订单明细列表，减免列表）
+     *
+     * @param orderNo
+     * @return
+     */
+    @Override
+    public OrderInfo getOrderInfo(String orderNo) {
+        OrderInfo orderInfo = orderInfoMapper.selectOne(
+                new LambdaQueryWrapper<OrderInfo>()
+                        .eq(OrderInfo::getOrderNo, orderNo)
+        );
+
+        /*
+            @Schema(description = "订单明细列表")
+            @TableField(exist = false)
+            private List<OrderDetail> orderDetailList;
+
+            @Schema(description = "订单减免明细列表")
+            @TableField(exist = false)
+            private List<OrderDerate> orderDerateList;
+
+            @TableField(exist = false)
+            private String orderStatusName;
+            @TableField(exist = false)
+            private String payWayName;
+         */
+        List<OrderDetail> orderDetailList = orderDetailService.list(
+                new LambdaQueryWrapper<OrderDetail>()
+                        .eq(OrderDetail::getOrderId, orderInfo.getId())
+        );
+        orderInfo.setOrderDetailList(orderDetailList);
+
+        List<OrderDerate> orderDerateList = orderDerateService.list(
+                new LambdaQueryWrapper<OrderDerate>()
+                        .eq(OrderDerate::getOrderId, orderInfo.getId())
+        );
+        orderInfo.setOrderDerateList(orderDerateList);
+        return orderInfo;
+    }
+
+    @Override
+    public Page<OrderInfo> findUserPage(Page<OrderInfo> pageInfo, Long userId) {
+//        pageInfo = orderInfoMapper.findUserPage(pageInfo, userId);
+        Page<OrderInfo> orderInfoPage = orderInfoMapper.selectPage(pageInfo,
+                new LambdaQueryWrapper<OrderInfo>()
+                        .eq(OrderInfo::getUserId, userId)
+                        .orderByDesc(OrderInfo::getId));
+        if (CollUtil.isNotEmpty(orderInfoPage.getRecords())) {
+            return orderInfoPage;
+        }
+
+//      List<OrderDetail> orderDetailList;未赋值
+//TODO 作业：获取本页订单，获取订单ID列表， 根据订单ID列表查询订单明细集合 转为 Map<订单ID, List<订单明细>> 组装订单中明细属性
+        List<Long> orderIdList = orderInfoPage.getRecords().stream()
+                .map(orderInfo -> {
+                    Long orderId = orderInfo.getId();
+                    return orderId;
+                }).collect(Collectors.toList());
+
+        List<OrderDetail> orderDetailList = orderDetailService.list(
+                new LambdaQueryWrapper<OrderDetail>()
+                        .in(OrderDetail::getOrderId, orderIdList)
+        );
+
+        Map<Long, List<OrderDetail>> detailMap = orderDetailList.stream().collect(Collectors.groupingBy(OrderDetail::getOrderId));
+        orderInfoPage.getRecords().forEach(info -> {
+            Long orderId = info.getId();
+            List<OrderDetail> orderDetails = detailMap.get(orderId);
+            info.setOrderDetailList(orderDetails);
+        });
+
+        return orderInfoPage;
+    }
 
 
+    @Override
+    public void orderPaySuccess(String orderNo) {
+        //1.更新订单状态
+        int update = orderInfoMapper.update(
+                null,
+                new LambdaUpdateWrapper<OrderInfo>()
+                        .eq(OrderInfo::getOrderNo, orderNo)
+                        .eq(OrderInfo::getOrderStatus, ORDER_STATUS_UNPAID)
+                        .set(OrderInfo::getOrderStatus, ORDER_STATUS_PAID)
+        );
+        if (update > 0) {
+            //2.虚拟物品发货
+            //2.1 构建虚拟物品发货记录VO对象
+            OrderInfo orderInfo =
+                    orderInfoMapper.selectOne(new LambdaQueryWrapper<OrderInfo>().eq(OrderInfo::getOrderNo, orderNo));
+            UserPaidRecordVo vo = new UserPaidRecordVo();
+            vo.setOrderNo(orderNo);
+            vo.setUserId(orderInfo.getUserId());
+            vo.setItemType(orderInfo.getItemType());
+            List<OrderDetail> orderDetailList = orderDetailService.list(
+                    new LambdaQueryWrapper<OrderDetail>()
+                            .eq(OrderDetail::getOrderId, orderInfo.getId())
+            );
+            List<Long> itemIdList = orderDetailList.stream().map(OrderDetail::getItemId).collect(Collectors.toList());
+            vo.setItemIdList(itemIdList);
 
-
-
-
-
-
-
-
-
-
-
+            //2.2 远程调用"用户服务"虚拟物品发货
+            Result result = userFeignClient.savePaidRecord(vo);
+            //2.3 判断响应业务状态码
+            if (result.getCode().intValue() != 200) {
+                throw new GuiguException(result.getCode(), result.getMessage());
+            }
+        }
+    }
 }
