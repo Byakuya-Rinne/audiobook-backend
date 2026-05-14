@@ -89,7 +89,7 @@ public class AlbumInfoApiController {
 	@Operation(summary = "根据专辑ID查询专辑信息（包括专辑标签列表）")
 	@GetMapping("/albumInfo/getAlbumInfo/{id}")
 	public Result<AlbumInfo> getAlbumInfo(@PathVariable Long id) {
-		AlbumInfo albumInfo = albumInfoService.getAlbumInfo(id);
+		AlbumInfo albumInfo = albumInfoService.getAlbumInfoFromDB(id);
 		return Result.ok(albumInfo);
 	}
 

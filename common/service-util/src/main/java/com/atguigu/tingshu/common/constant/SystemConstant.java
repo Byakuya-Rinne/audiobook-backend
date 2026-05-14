@@ -17,6 +17,7 @@ public class SystemConstant {
     //专辑状态 0301-审核通过 0302-审核不通过
     public static final String  ALBUM_STATUS_PASS="0301";  // 审核通过
     public static final String  ALBUM_STATUS_NO_PASS="0302";  // 审核不通过
+    public static final String  ALBUM_STATUS_ARTIFICIAL="0303";  // 人工
 
     //专辑统计 0401-播放量 0402-订阅量 0403-购买量 0403-评论数
     public static final String  ALBUM_STAT_PLAY="0401";  // 播放量

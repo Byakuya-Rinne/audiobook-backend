@@ -9,6 +9,7 @@ import com.atguigu.tingshu.vo.album.AlbumTrackListVo;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
+import org.springframework.cache.annotation.Cacheable;
 
 import java.util.List;
 
@@ -25,11 +26,14 @@ public interface AlbumInfoService extends IService<AlbumInfo> {
 
     void removeAlbumInfo(Long id);
 
-    AlbumInfo getAlbumInfo(Long id);
+    AlbumInfo getAlbumInfoFromDB(Long id);
 
     void updateAlbumInfo(Long id, AlbumInfoVo albumInfoVo);
 
     AlbumStatVo getAlbumStatVo(Long albumId);
 
     Page<AlbumTrackListVo> findAlbumTrackPage(Page<AlbumTrackListVo> pageInfo, Long userId, Long albumId);
+
+    @Cacheable(value = "albuminfo", key = "#id")
+    AlbumInfo getAlbumInfo(Long id);
 }

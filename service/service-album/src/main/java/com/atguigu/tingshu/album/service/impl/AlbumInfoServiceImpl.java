@@ -1,6 +1,7 @@
 package com.atguigu.tingshu.album.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.RandomUtil;
 import com.atguigu.tingshu.album.mapper.AlbumAttributeValueMapper;
 import com.atguigu.tingshu.album.mapper.AlbumInfoMapper;
 import com.atguigu.tingshu.album.mapper.AlbumStatMapper;
@@ -8,11 +9,10 @@ import com.atguigu.tingshu.album.mapper.TrackInfoMapper;
 import com.atguigu.tingshu.album.service.AlbumAttributeValueService;
 import com.atguigu.tingshu.album.service.AlbumInfoService;
 import com.atguigu.tingshu.album.service.AuditService;
+import com.atguigu.tingshu.common.constant.RedisConstant;
 import com.atguigu.tingshu.common.execption.GuiguException;
 import com.atguigu.tingshu.common.rabbit.constant.MqConst;
 import com.atguigu.tingshu.common.rabbit.service.RabbitService;
-import com.atguigu.tingshu.common.result.Result;
-import com.atguigu.tingshu.common.util.AuthContextHolder;
 import com.atguigu.tingshu.model.album.AlbumAttributeValue;
 import com.atguigu.tingshu.model.album.AlbumInfo;
 import com.atguigu.tingshu.model.album.AlbumStat;
@@ -26,15 +26,19 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import org.redisson.api.RBloomFilter;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.atguigu.tingshu.common.constant.SystemConstant.*;
 import static com.atguigu.tingshu.common.constant.SystemConstant.*;
 import static com.atguigu.tingshu.common.result.ResultCodeEnum.ALBUM_NODE_ERROR;
 import static com.atguigu.tingshu.common.result.ResultCodeEnum.DATA_ERROR;
@@ -65,6 +69,11 @@ public class AlbumInfoServiceImpl extends ServiceImpl<AlbumInfoMapper, AlbumInfo
 	@Autowired
 	private UserFeignClient userFeignClient;
 
+	@Autowired
+	RedisTemplate redisTemplate;
+
+	@Autowired
+	private RedissonClient redissonClient;
 
 	/**
 	 * TODO 该接口登录才可以访问
@@ -182,27 +191,6 @@ public class AlbumInfoServiceImpl extends ServiceImpl<AlbumInfoMapper, AlbumInfo
 
 	}
 
-	/**
-	 * 查询专辑信息（包含标签列表）
-	 * @param id
-	 * @return
-	 */
-	@Override
-	public AlbumInfo getAlbumInfo(Long id) {
-		AlbumInfo albumInfo = albumInfoMapper.selectById(id);
-		//还剩 List<AlbumAttributeValue> albumAttributeValueVoList
-
-		if (albumInfo != null){
-			List<AlbumAttributeValue> albumAttributeValueList = albumAttributeValueMapper.selectList(
-					new LambdaQueryWrapper<AlbumAttributeValue>()
-							.eq(AlbumAttributeValue::getAlbumId, id)
-			);
-			albumInfo.setAlbumAttributeValueVoList(albumAttributeValueList);
-		}
-
-
-		return albumInfo;
-	}
 
 
 	/**
@@ -242,16 +230,16 @@ public class AlbumInfoServiceImpl extends ServiceImpl<AlbumInfoMapper, AlbumInfo
 		//把所有文本扔到一起，丢给申鹤
 		String allText = albumInfoVo.getAlbumTitle() + "，" + albumInfoVo.getAlbumIntro();
 		//auditService
-//		String suggest = auditService.auditText(allText);
-//		if("block".equals(suggest)){
-//			albumInfo.setStatus(ALBUM_STATUS_NO_PASS);
-//			rabbitService.sendMessage(MqConst.EXCHANGE_ALBUM, MqConst.ROUTING_ALBUM_LOWER, id);
-//		}else if("review".equals(suggest)){
-//			albumInfo.setStatus(ALBUM_STATUS_ARTIFICIAL);
-//		}else if("pass".equals(suggest)){
-//			albumInfo.setStatus(ALBUM_STATUS_PASS);
-//			rabbitService.sendMessage(MqConst.EXCHANGE_ALBUM, MqConst.ROUTING_ALBUM_UPPER, id);
-//		}
+		String suggest = auditService.auditText(allText);
+		if("block".equals(suggest)){
+			albumInfo.setStatus(ALBUM_STATUS_NO_PASS);
+			rabbitService.sendMessage(MqConst.EXCHANGE_ALBUM, MqConst.ROUTING_ALBUM_LOWER, id);
+		}else if("review".equals(suggest)){
+			albumInfo.setStatus(ALBUM_STATUS_ARTIFICIAL);
+		}else if("pass".equals(suggest)){
+			albumInfo.setStatus(ALBUM_STATUS_PASS);
+			rabbitService.sendMessage(MqConst.EXCHANGE_ALBUM, MqConst.ROUTING_ALBUM_UPPER, id);
+		}
 		albumInfoMapper.updateById(albumInfo);
 
 
@@ -371,4 +359,88 @@ public class AlbumInfoServiceImpl extends ServiceImpl<AlbumInfoMapper, AlbumInfo
 
 		return pageInfo;
 	}
+
+
+	/**
+	 * 从数据库硬盘查询专辑信息（包含标签列表）
+	 * @param id
+	 * @return
+	 */
+	@Override
+	public AlbumInfo getAlbumInfoFromDB(Long id) {
+		AlbumInfo albumInfo = albumInfoMapper.selectById(id);
+		//还剩 List<AlbumAttributeValue> albumAttributeValueVoList
+
+		if (albumInfo != null){
+			List<AlbumAttributeValue> albumAttributeValueList = albumAttributeValueMapper.selectList(
+					new LambdaQueryWrapper<AlbumAttributeValue>()
+							.eq(AlbumAttributeValue::getAlbumId, id)
+			);
+			albumInfo.setAlbumAttributeValueVoList(albumAttributeValueList);
+		}
+
+
+		return albumInfo;
+	}
+
+
+
+	/**
+	 * 查询专辑信息，引入缓存提升性能 采用分布式锁避免缓存击穿问题
+	 *
+	 * @param id
+	 * @return
+	 */
+	@Override
+	@Cacheable(value = "albuminfo", key = "#id")
+	public AlbumInfo getAlbumInfo(Long id) {
+		try {
+			//先查redis，如果命中直接返回
+			String dataKey = RedisConstant.ALBUM_INFO_PREFIX + id;
+			AlbumInfo albumInfo = (AlbumInfo)redisTemplate.opsForValue().get(dataKey);
+			if (albumInfo != null){
+				return albumInfo;
+			}
+
+			//如果没命中，先加分布式锁
+			//2.1 定义锁的Key 形式=业务Key+锁后缀 锁粒度尽可能细
+			String lockKey = dataKey + RedisConstant.CACHE_LOCK_SUFFIX;
+			RLock lock = redissonClient.getLock(lockKey);
+
+			boolean lockFlag = lock.tryLock(
+					RedisConstant.ALBUM_LOCK_WAIT_PX1,
+					RedisConstant.ALBUM_LOCK_EXPIRE_PX2,
+					TimeUnit.SECONDS
+			);
+
+			//加锁成功，查数据库
+			if (lockFlag){
+				try{
+					AlbumInfo albumInfoFromDB = this.getAlbumInfoFromDB(id);
+					//把数据库查询结果加到redis
+					//设置随机过期时间，解决缓存雪崩
+					long ttl = RedisConstant.ALBUM_TIMEOUT + RandomUtil.randomInt(300, 600);
+					redisTemplate.opsForValue().set(dataKey, albumInfoFromDB, ttl, TimeUnit.SECONDS);
+					//返回结果
+					return albumInfoFromDB;
+				}finally {
+					//释放锁
+					lock.unlock();
+				}
+
+			}else {
+				//没加锁成功，睡眠递归
+				TimeUnit.MILLISECONDS.sleep(50);
+				return this.getAlbumInfo(id);
+			}
+
+		} catch (Exception e) {
+			log.error("Redis服务不可用", e);
+			//如果Redis服务有异常，兜底处理：直接查询数据库
+			AlbumInfo albumInfoFromDB = this.getAlbumInfoFromDB(id);
+			return albumInfoFromDB;
+		}
+	}
+
+
 }

@@ -43,6 +43,7 @@
         <kafka-clients.version>3.1.0</kafka-clients.version>
         <kafka-streams.version>3.1.0</kafka-streams.version>
         <commons-io.version>2.11.0</commons-io.version>
+        <redisson.version>3.20.0</redisson.version>
     </properties>
 
     <!--配置dependencyManagement锁定依赖的版本-->
@@ -163,6 +164,13 @@
                 <artifactId>commons-io</artifactId>
                 <version>${commons-io.version}</version>
             </dependency>
+
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson-spring-boot-starter</artifactId>
+                <version>${redisson.version}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 
